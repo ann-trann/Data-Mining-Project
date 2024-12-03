@@ -1,13 +1,17 @@
 import pandas as pd
+import gradio as gr
 
-def add_kmeans_data(df, customer_id, gender, age, income, spending):
+
+def add_kmeans_data(df, gender, age, income, spending):
     new_row = pd.DataFrame({
         'Gender': [gender],
         'Age': [age],
         'Annual Income (k$)': [income],
         'Spending Score (1-100)': [spending]
     })
-    return pd.concat([df, new_row], ignore_index=True)
+    updated_df = pd.concat([df, new_row], ignore_index=True)
+    return updated_df
+
 
 def add_decision_tree_data(df, age, income, region, credit_rating, buy_mobile):
     new_row = pd.DataFrame({
@@ -17,7 +21,9 @@ def add_decision_tree_data(df, age, income, region, credit_rating, buy_mobile):
         'credit_rating': [credit_rating],
         'Buy Mobile': [buy_mobile]
     })
-    return pd.concat([df, new_row], ignore_index=True)
+    updated_df = pd.concat([df, new_row], ignore_index=True)
+    return updated_df
+
 
 def add_naive_bayes_data(df, outlook, temperature, humidity, wind, play_ball):
     new_row = pd.DataFrame({
@@ -28,3 +34,4 @@ def add_naive_bayes_data(df, outlook, temperature, humidity, wind, play_ball):
         'Play ball': [play_ball]
     })
     return pd.concat([df, new_row], ignore_index=True)
+

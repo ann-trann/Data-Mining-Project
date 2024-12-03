@@ -17,3 +17,8 @@ def load_naive_bayes_data():
     data_path = os.path.join(current_dir, 'data', 'weather_data.csv')
     data = pd.read_csv(data_path)
     return data
+
+def load_transaction_data():
+    data_path = os.path.join(current_dir, 'data', 'supermarket_transactions.csv')
+    data = pd.read_csv(data_path).fillna('')
+    return data
