@@ -1,7 +1,11 @@
 import gradio as gr
 from data_loader import load_kmeans_data, load_decision_tree_data, load_naive_bayes_data, load_transaction_data
 from data_adder import add_kmeans_data, add_decision_tree_data
-from algorithms import run_kmeans, run_decision_tree, run_naive_bayes, run_association_rules
+from algorithms.kmeans import run_kmeans_interactive_3d
+from algorithms.decision_tree import run_decision_tree
+from algorithms.naive_bayes import run_naive_bayes
+from algorithms.associasion_rules import run_association_rules
+
 
 def create_interface():
     # Load dữ liệu ban đầu
@@ -14,28 +18,75 @@ def create_interface():
         gr.Markdown("# Data Mining Project")
         
         with gr.Tabs():
-            # K-means tab
-            with gr.Tab("K-means Clustering"):
+            
+            #==================== Association Rules tab ====================#
+            with gr.Tab("Frequent Itemsets & Association Rules"):
                 with gr.Row():
-                    # Cột nhập dữ liệu
-                    with gr.Column(scale=1):
-                        gender = gr.Dropdown(choices=['Male', 'Female'], label="Gender")
-                        age = gr.Number(label="Age")
-                        income = gr.Number(label="Annual Income (k$)")
-                        spending = gr.Slider(1, 100, label="Spending Score")
-                        kmeans_add_btn = gr.Button("Add Data")
-                        success_markdown_kmeans = gr.Markdown(visible=False)
-                    
-                    # Cột hiển thị bảng dữ liệu
+                    # Data display column
                     with gr.Column(scale=2):
-                        kmeans_data = gr.DataFrame(value=kmeans_df)
+                        transaction_data = gr.DataFrame(value=transaction_df)
+                    
+                    # Input column
+                    with gr.Column(scale=1):
+                        min_support = gr.Slider(0.01, 1.0, value=0.5, step=0.01, label="Minimum Support")
                 
-                n_clusters = gr.Slider(2, 5, value=3, step=1, label="Number of Clusters")
-                kmeans_run_btn = gr.Button("Run K-means")
-                kmeans_plot = gr.Plot()
-                kmeans_output = gr.DataFrame()
+                # Run button
+                ar_run_btn = gr.Button("Find Frequent Itemsets")
+                
+                # Outputs
+                ar_plot = gr.Plot()
+                fi_output = gr.Textbox(label="Frequent Itemsets")
+                ar_output = gr.Textbox(label="Association Rules")
 
-            # Decision Tree tab
+
+            #==================== Naive Bayes tab ====================#
+            with gr.Tab("Naive Bayes"):
+                with gr.Row():
+                    # Input column
+                    with gr.Column(scale=1):
+                        outlook = gr.Dropdown(choices=['Sunny', 'Overcast', 'Rainy'], label="Outlook")
+                        temperature = gr.Dropdown(choices=['Hot', 'Mild', 'Cool'], label="Temperature")
+                        humidity = gr.Dropdown(choices=['High', 'Normal'], label="Humidity")
+                        wind = gr.Dropdown(choices=['Weak', 'Strong'], label="Wind")
+                        use_laplace = gr.Checkbox(label="Use Laplace Smoothing")
+                        nb_new_sample_btn = gr.Button("New Sample")
+                        nb_new_sample = gr.Textbox(label="New Sample")
+                    
+                    # Data display column
+                    with gr.Column(scale=2):
+                        nb_data = gr.DataFrame(value=nb_df)
+
+                nb_run_btn = gr.Button("Classification using Naive Bayes")
+                nb_plot = gr.Plot()
+
+            # Hàm cập nhật nội dung Textbox
+            def create_new_sample_text(outlook, temperature, humidity, wind):
+                return f"Outlook: {outlook}, Temperature: {temperature}, Humidity: {humidity}, Wind: {wind}"
+
+            # Gắn sự kiện `change` để cập nhật Textbox khi giá trị thay đổi
+            outlook.change(
+                create_new_sample_text,
+                inputs=[outlook, temperature, humidity, wind],
+                outputs=[nb_new_sample]
+            )
+            temperature.change(
+                create_new_sample_text,
+                inputs=[outlook, temperature, humidity, wind],
+                outputs=[nb_new_sample]
+            )
+            humidity.change(
+                create_new_sample_text,
+                inputs=[outlook, temperature, humidity, wind],
+                outputs=[nb_new_sample]
+            )
+            wind.change(
+                create_new_sample_text,
+                inputs=[outlook, temperature, humidity, wind],
+                outputs=[nb_new_sample]
+            )
+
+            
+            #==================== Decision Tree tab ====================#
             with gr.Tab("Decision Tree"):
                 with gr.Row():
                     # Cột nhập dữ liệu
@@ -55,42 +106,32 @@ def create_interface():
                 dt_run_btn = gr.Button("Run Decision Tree")
                 dt_plot = gr.Plot()
 
-            # Naive Bayes tab
-            with gr.Tab("Naive Bayes"):
-                with gr.Row():
-                    # Input column
-                    with gr.Column(scale=1):
-                        outlook = gr.Dropdown(choices=['Sunny', 'Overcast', 'Rainy'], label="Outlook")
-                        temperature = gr.Dropdown(choices=['Hot', 'Mild', 'Cool'], label="Temperature")
-                        humidity = gr.Dropdown(choices=['High', 'Normal'], label="Humidity")
-                        wind = gr.Dropdown(choices=['Weak', 'Strong'], label="Wind")
-                        nb_new_sample_btn = gr.Button("New Sample")
-                        nb_new_sample = gr.Textbox(label="New Sample")
-                    
-                    # Data display column
-                    with gr.Column(scale=2):
-                        nb_data = gr.DataFrame(value=nb_df)
 
-                nb_run_btn = gr.Button("Classification using Naive Bayes")
-                nb_plot = gr.Plot()
-
-            with gr.Tab("Frequent Itemsets & Association Rules"):
+            #==================== K-means tab ====================#
+            with gr.Tab("K-means Clustering"):
                 with gr.Row():
-                    # Data display column
-                    with gr.Column(scale=2):
-                        transaction_data = gr.DataFrame(value=transaction_df)
-                    
-                    # Input column
+                    # Cột nhập dữ liệu
                     with gr.Column(scale=1):
-                        min_support = gr.Slider(0.01, 1.0, value=0.2, step=0.01, label="Minimum Support")
+                        gender = gr.Dropdown(choices=['Male', 'Female'], label="Gender")
+                        age = gr.Number(label="Age")
+                        income = gr.Number(label="Annual Income (k$)")
+                        spending = gr.Slider(1, 100, label="Spending Score")
+                        kmeans_add_btn = gr.Button("Add Data")
+                        success_markdown_kmeans = gr.Markdown(visible=False)
+                    
+                    # Cột hiển thị bảng dữ liệu
+                    with gr.Column(scale=2):
+                        kmeans_data = gr.DataFrame(value=kmeans_df)
                 
-                # Run button
-                ar_run_btn = gr.Button("Find Frequent Itemsets")
-                
-                # Outputs
-                ar_plot = gr.Plot()
-                fi_output = gr.Textbox(label="Frequent Itemsets")
-                ar_output = gr.Textbox(label="Association Rules")
+                n_clusters = gr.Slider(2, 10, value=3, step=1, label="Number of Clusters")
+                kmeans_run_btn = gr.Button("Run K-means")
+                kmeans_plot = gr.Plot()
+                kmeans_output = gr.DataFrame()
+            
+
+            #============================================================#
+
+
 
         # Event handlers
         def show_kmeans_success(_):
@@ -142,7 +183,7 @@ def create_interface():
         
         # Run buttons event handlers
         kmeans_run_btn.click(
-            run_kmeans,
+            run_kmeans_interactive_3d,
             inputs=[kmeans_data, n_clusters],
             outputs=[kmeans_plot, kmeans_output]
         )
@@ -162,7 +203,7 @@ def create_interface():
 
         nb_run_btn.click(
             run_naive_bayes,
-            inputs=[nb_data, outlook, temperature, humidity, wind],
+            inputs=[nb_data, outlook, temperature, humidity, wind, use_laplace],
             outputs=[nb_plot]
         )
 
