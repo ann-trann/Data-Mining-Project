@@ -4,7 +4,7 @@ from data_adder import add_kmeans_data, add_decision_tree_data
 from algorithms.kmeans import run_kmeans_interactive_3d
 from algorithms.decision_tree import run_decision_tree
 from algorithms.naive_bayes import run_naive_bayes
-from algorithms.associasion_rules import run_association_rules
+from algorithms.association_rules import run_association_rules
 
 
 def create_interface():

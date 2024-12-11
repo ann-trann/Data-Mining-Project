@@ -1,6 +1,4 @@
 import pandas as pd
-import gradio as gr
-
 
 def add_kmeans_data(df, gender, age, income, spending):
     new_row = pd.DataFrame({
