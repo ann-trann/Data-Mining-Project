@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Pre-processing Data</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        .mt-5 {
+            margin-top: 4rem !important;
+        }
+        .stats-table {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4"
+            style="position: fixed; top: 0; width: 100%; z-index: 1000;">
+            <div class="container-fluid">
+                <a class="btn btn-outline-primary" href="/">Trang Chủ</a>
+            </div>
+        </nav>
+
+        <h1 class="mb-4">Pre-processing Data</h1>
+
+        <div class="row">
+            <div class="upload-data col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">Tải Dữ Liệu</div>
+                    <div class="card-body">
+                        <input type="file" id="fileUpload" class="form-control" accept=".csv">
+                        <button onclick="uploadFile()" class="btn btn-primary mt-2">Tải Lên</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row" id="dataSection" style="display:none;">
+            <div class="col-md-7">
+                <div class="card mb-4">
+                    <div class="card-header">Dữ Liệu Gốc</div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                        <table id="dataTable" class="table table-striped">
+                            <thead id="tableHeader"></thead>
+                            <tbody id="tableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="card mb-4">
+                    <div class="card-header">Cài Đặt</div>
+                    <div class="card-body">
+                        <button onclick="preprocessData()" class="btn btn-success">
+                            Tiền Xử Lý Dữ Liệu
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row" id="preprocessingSection" style="display:none;">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">Thống Kê Mô Tả</div>
+                    <div class="card-body stats-table">
+                        <table id="descriptiveStatsTable" class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Chỉ Số</th>
+                                    <th>Giá Trị</th>
+                                </tr>
+                            </thead>
+                            <tbody id="descriptiveStatsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">Giá Trị Bị Thiếu</div>
+                    <div class="card-body">
+                        <table id="missingValuesTable" class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Cột</th>
+                                    <th>Số Giá Trị Bị Thiếu</th>
+                                </tr>
+                            </thead>
+                            <tbody id="missingValuesBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">Dữ Liệu Sau Tiền Xử Lý</div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                        <table id="preprocessedTable" class="table table-striped">
+                            <thead id="preprocessedHeader"></thead>
+                            <tbody id="preprocessedBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let uploadedFilePath = '';
+        let columns = [];
+
+        function uploadFile() {
+            const fileInput = document.getElementById('fileUpload');
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            axios.post('/upload', formData)
+                .then(response => {
+                    uploadedFilePath = response.data.filepath;
+
+                    const data = response.data.data;
+                    columns = response.data.columns;
+
+                    // Hiển thị header
+                    const headerRow = document.getElementById('tableHeader');
+                    headerRow.innerHTML = columns.map(col => `<th>${col}</th>`).join('');
+
+                    // Hiển thị dữ liệu
+                    const tableBody = document.getElementById('tableBody');
+                    tableBody.innerHTML = data.map(row =>
+                        `<tr>${columns.map(col => `<td>${row[col]}</td>`).join('')}</tr>`
+                    ).join('');
+
+                    // Hiển thị section dữ liệu
+                    document.getElementById('dataSection').style.display = 'flex';
+                    document.getElementById('preprocessingSection').style.display = 'none';
+                })
+                .catch(error => {
+                    alert('Lỗi: ' + error.response.data.error);
+                });
+        }
+
+        function preprocessData() {
+            if (!uploadedFilePath) {
+                alert('Vui lòng tải lên dữ liệu trước');
+                return;
+            }
+
+            // Send request to preprocess endpoint
+            axios.post('/run-preprocess', { filepath: uploadedFilePath })
+                .then(response => {
+                    // Display descriptive statistics
+                    const descriptiveStatsBody = document.getElementById('descriptiveStatsBody');
+                    descriptiveStatsBody.innerHTML = Object.entries(response.data.descriptive_stats)
+                        .map(([key, value]) => `
+                            <tr>
+                                <td>${key}</td>
+                                <td>${typeof value === 'object' ? JSON.stringify(value) : value}</td>
+                            </tr>
+                        `).join('');
+
+                    // Display missing values
+                    const missingValuesBody = document.getElementById('missingValuesBody');
+                    missingValuesBody.innerHTML = Object.entries(response.data.missing_values)
+                        .map(([column, count]) => `
+                            <tr>
+                                <td>${column}</td>
+                                <td>${count}</td>
+                            </tr>
+                        `).join('');
+
+                    // Display preprocessed data
+                    const preprocessedHeader = document.getElementById('preprocessedHeader');
+                    preprocessedHeader.innerHTML = response.data.preprocessed_columns
+                        .map(col => `<th>${col}</th>`).join('');
+
+                    const preprocessedBody = document.getElementById('preprocessedBody');
+                    preprocessedBody.innerHTML = response.data.preprocessed_data
+                        .map(row => `<tr>${
+                            response.data.preprocessed_columns
+                                .map(col => `<td>${row[col]}</td>`)
+                                .join('')
+                        }</tr>`).join('');
+
+                    // Show preprocessing section
+                    document.getElementById('preprocessingSection').style.display = 'flex';
+                })
+                .catch(error => {
+                    alert('Lỗi: ' + error.response.data.error);
+                });
+        }
+    </script>
+</body>
+</html>

@@ -1,45 +1,87 @@
+import os
+import json
+import tempfile
+import base64
+import io
+from flask import Flask, request, jsonify
 import pandas as pd
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.tree import plot_tree
-from sklearn.preprocessing import LabelEncoder
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 
-# Decision Tree Algorithm
-def run_decision_tree(df):
-    le = LabelEncoder()
-    df_encoded = df.copy()
-    for column in df_encoded.columns:
-        df_encoded[column] = le.fit_transform(df_encoded[column])
+
+def plot_to_base64(fig):
+    buffer = io.BytesIO()
+    fig.savefig(buffer, format='png', bbox_inches='tight')
+    buffer.seek(0)
+    plot_data = base64.b64encode(buffer.getvalue()).decode()
+    plt.close(fig)  # Close the specific figure
+    return plot_data
+
+def run_decision_tree_analysis(data, features, target, criterion='entropy'):
+    # Create DataFrame from data
+    df = pd.DataFrame(data)
     
-    X = df_encoded.drop('Buy Mobile', axis=1)
-    y = df_encoded['Buy Mobile']
+    # Prepare data for encoding
+    X = df[features]
+    y = df[target]
     
-    model = DecisionTreeClassifier(random_state=42, max_depth=3)  # Limit depth for better visualization
-    model.fit(X, y)
+    # Encode categorical features and target
+    label_encoders = {}
+    X_encoded = X.copy()
+    for column in X.select_dtypes(include=['object']).columns:
+        le = LabelEncoder()
+        X_encoded[column] = le.fit_transform(X[column])
+        label_encoders[column] = le
     
-    y_pred = model.predict(X)
-    accuracy = (y_pred == y).mean()
+    # Encode target variable
+    target_encoder = LabelEncoder()
+    y_encoded = target_encoder.fit_transform(y)
     
-    # Create a figure with two subplots
-    plt.figure(figsize=(20, 10))
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(X_encoded, y_encoded, test_size=0.2, random_state=42)
     
-    # Subplot 1: Decision Tree Visualization
-    plt.subplot(1, 2, 1)
-    plot_tree(model, 
-              feature_names=X.columns, 
-              class_names=['No', 'Yes'], 
+    # Train Decision Tree with selected criterion
+    dt_classifier = DecisionTreeClassifier(random_state=42, criterion=criterion)
+    dt_classifier.fit(X_train, y_train)
+    
+    # Visualize Decision Tree
+    fig, ax = plt.subplots(figsize=(20,10))
+    plot_tree(dt_classifier, 
+              feature_names=features, 
+              class_names=target_encoder.classes_, 
               filled=True, 
               rounded=True, 
-              fontsize=10)
-    plt.title('Decision Tree Visualization')
+              fontsize=10,
+              ax=ax)
+    decision_tree_plot = plot_to_base64(fig)
     
-    # Subplot 2: Feature Importance
-    plt.subplot(1, 2, 2)
-    feature_importance = pd.Series(model.feature_importances_, index=X.columns)
-    feature_importance.sort_values().plot(kind='barh')
-    plt.title('Feature Importance')
+    # Feature Importance
+    fig, ax = plt.subplots(figsize=(10,6))
+    feature_importance = dt_classifier.feature_importances_
+    indices = np.argsort(feature_importance)[::-1]
     
-    # Adjust layout to prevent overlap
+    ax.set_title("Feature Importances")
+    ax.bar(range(len(features)), feature_importance[indices])
+    ax.set_xticks(range(len(features)))
+    ax.set_xticklabels([features[i] for i in indices], rotation=45)
     plt.tight_layout()
+    feature_importance_plot = plot_to_base64(fig)
     
-    return plt.gcf()
+    # Prepare results
+    results = {
+        "accuracy": float(dt_classifier.score(X_test, y_test)),
+        "feature_importance": {
+            features[i]: float(feature_importance[i]) 
+            for i in range(len(features))
+        },
+        "decision_tree_plot": decision_tree_plot,
+        "feature_importance_plot": feature_importance_plot,
+        "classes": list(target_encoder.classes_)
+    }
+    
+    return results

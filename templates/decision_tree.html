@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Decision Tree</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        .mt-5 {
+            margin-top: 4rem !important;
+        }
+        #dataSelectionPanel, #resultsPanel {
+            display: none;
+        }
+        #dataTable {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .feature-dropdown {
+            margin-bottom: 10px;
+        }
+        .form-select[multiple], .form-select[size]:not([size="1"]) {
+            padding-right: .75rem;
+            background-image: none;
+            height: 80px;
+        }
+        .criterion-selection {
+            margin-bottom: 15px;
+        }
+
+        .criterion-selection {
+            display: block !important;
+            visibility: visible !important;
+        }
+
+        #criterionBadge {
+            font-size: 0.9rem;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4" style="position: fixed; top: 0; width: 100%; z-index: 1000;">
+            <div class="container-fluid">
+                <a class="btn btn-outline-primary" href="/">Trang Chủ</a>
+            </div>
+        </nav>
+
+        <h1 class="mb-4">
+            Thuật Toán Decision Tree 
+            <span id="criterionBadge" class="badge bg-secondary"></span>
+        </h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">Tải Dữ Liệu</div>
+                    <div class="card-body">
+                        <input type="file" id="fileUpload" class="form-control" accept=".csv">
+                        <button onclick="uploadFile()" class="btn btn-primary mt-2">Tải Lên</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row" id="dataSelectionPanel">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">Dữ Liệu</div>
+                    <div class="card-body">
+                        <div id="dataTable" class="table-responsive">
+                            <table class="table table-striped table-bordered" id="csvTable">
+                                <thead id="tableHeader"></thead>
+                                <tbody id="tableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">Chọn Đặc Trưng</div>
+                    <div class="card-body" id="featureSelectionContainer">
+                        <!-- Criterion Selection -->
+                        <div class="criterion-selection">
+                            <label class="form-label">Tiêu Chí Phân Chia:</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="criterion" id="entropyRadio" value="entropy" checked>
+                                <label class="form-check-label" for="entropyRadio">
+                                    Information Gain (Entropy)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="criterion" id="giniRadio" value="gini">
+                                <label class="form-check-label" for="giniRadio">
+                                    Gini Impurity
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic feature dropdowns will be created here -->
+                        <div class="d-grid gap-2 mt-3">
+                            <button id="runDecisionTreeBtn" class="btn btn-primary">Chạy Decision Tree</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4" id="resultsPanel">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">Kết Quả</div>
+                    <div class="card-body">
+                        <div id="accuracyDisplay" class="alert alert-info"></div>
+                        <div id="criterionDisplay" class="alert alert-secondary"></div>
+                        <div id="featureImportanceChart"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">Cây Quyết Định</div>
+                    <div class="card-body">
+                        <img id="decisionTreeImage" class="img-fluid" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        let csvData = null;
+        let currentFilePath = null;
+        let dataColumns = [];
+        let selectedDataPoints = [];
+        
+        function uploadFile() {
+            const fileInput = document.getElementById('fileUpload');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Vui lòng chọn file CSV');
+                return;
+            }
+
+            // Check file type
+            if (!file.name.toLowerCase().endsWith('.csv')) {
+                alert('Vui lòng chọn file CSV');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Show loading indicator
+            const uploadBtn = event.target;
+            uploadBtn.disabled = true;
+            uploadBtn.innerHTML = 'Đang tải...';
+
+            axios.post('/upload', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                },
+                timeout: 30000 // 30 seconds timeout
+            })
+            .then(response => {
+                if (!response.data || !response.data.data) {
+                    throw new Error('Dữ liệu không hợp lệ');
+                }
+
+                currentFilePath = response.data.filepath;
+                dataColumns = response.data.columns;
+                csvData = response.data.data;
+
+                // Store original CSV data
+                originalCSVData = [...csvData];
+                
+                // Validate data
+                if (!csvData || csvData.length === 0) {
+                    throw new Error('File CSV trống');
+                }
+
+                // Display data
+                displayCSVData(csvData);
+                createFeatureDropdowns(csvData);
+                
+                // Show data selection panel
+                document.getElementById('dataSelectionPanel').style.display = 'flex';
+                
+                // Create "Add Selected Data" button
+                createAddDataButton();
+
+                // Reset upload button
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = 'Tải Lên';
+            })
+            .catch(error => {
+                console.error('Lỗi tải file:', error);
+                
+                // More detailed error handling
+                let errorMessage = 'Có lỗi xảy ra khi tải file';
+                if (error.response) {
+                    // The request was made and the server responded with a status code
+                    errorMessage = error.response.data.message || 'Lỗi từ máy chủ';
+                } else if (error.request) {
+                    // The request was made but no response was received
+                    errorMessage = 'Không có phản hồi từ máy chủ';
+                } else {
+                    // Something happened in setting up the request
+                    errorMessage = error.message || 'Lỗi kết nối';
+                }
+
+                alert(errorMessage);
+
+                // Reset upload button
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = 'Tải Lên';
+            });
+        }
+
+        function createFeatureDropdowns(data) {
+            const container = document.getElementById('featureSelectionContainer');
+            
+            // Clear existing dropdowns except the run button
+            const runButton = document.getElementById('runDecisionTreeBtn');
+            container.innerHTML = '';
+            container.appendChild(runButton);
+
+            // Last column is typically the target/label column
+            const labelColumn = dataColumns[dataColumns.length - 1];
+
+            // Create dropdowns for each column except the last one
+            dataColumns.slice(0, -1).forEach(column => {
+                // Get unique values for this column
+                const uniqueValues = [...new Set(data.map(row => row[column]))];
+
+                // Create dropdown container
+                const dropdownContainer = document.createElement('div');
+                dropdownContainer.className = 'feature-dropdown';
+
+                // Create label
+                const label = document.createElement('label');
+                label.textContent = column;
+                label.className = 'form-label';
+                dropdownContainer.appendChild(label);
+
+                // Create multi-select dropdown
+                const select = document.createElement('select');
+                select.id = `feature-${column}`;
+                select.className = 'form-select';
+                select.multiple = true;
+
+                // Populate dropdown with unique values
+                uniqueValues.forEach(value => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = value;
+                    select.appendChild(option);
+                });
+
+                dropdownContainer.appendChild(select);
+                container.insertBefore(dropdownContainer, runButton);
+            });
+
+            // Create target dropdown
+            const targetDropdownContainer = document.createElement('div');
+            targetDropdownContainer.className = 'feature-dropdown';
+
+            const targetLabel = document.createElement('label');
+            targetLabel.textContent = 'Biến Mục Tiêu';
+            targetLabel.className = 'form-label';
+            targetDropdownContainer.appendChild(targetLabel);
+
+            const targetSelect = document.createElement('select');
+            targetSelect.id = 'target-dropdown';
+            targetSelect.className = 'form-select';
+
+            // Populate target dropdown with unique values from label column
+            const uniqueTargetValues = [...new Set(data.map(row => row[labelColumn]))];
+            uniqueTargetValues.forEach(value => {
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = value;
+                targetSelect.appendChild(option);
+            });
+
+            targetDropdownContainer.appendChild(targetSelect);
+            container.insertBefore(targetDropdownContainer, runButton);
+        }
+        
+        function createAddDataButton() {
+            const container = document.getElementById('featureSelectionContainer');
+            const addDataButton = document.createElement('button');
+            addDataButton.textContent = 'Thêm Dữ Liệu Đã Chọn';
+            addDataButton.className = 'btn btn-success mt-2';
+            addDataButton.id = 'addSelectedDataBtn';
+            addDataButton.addEventListener('click', addSelectedData);
+            
+            // Insert before the run decision tree button
+            const runButton = document.getElementById('runDecisionTreeBtn');
+            container.insertBefore(addDataButton, runButton);
+        }
+        
+
+        function displayCSVData(data) {
+            const tableHeader = document.getElementById('tableHeader');
+            const tableBody = document.getElementById('tableBody');
+            
+            // Clear existing content
+            tableHeader.innerHTML = '';
+            tableBody.innerHTML = '';
+
+            // Create header
+            const headerRow = document.createElement('tr');
+            Object.keys(data[0]).forEach(key => {
+                const th = document.createElement('th');
+                th.textContent = key;
+                headerRow.appendChild(th);
+            });
+            tableHeader.appendChild(headerRow);
+
+            // Create rows
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                Object.values(row).forEach(value => {
+                    const td = document.createElement('td');
+                    td.textContent = value;
+                    tr.appendChild(td);
+                });
+                tableBody.appendChild(tr);
+            });
+        }
+
+
+
+        function addSelectedData() {
+    // Verify data exists
+    if (!csvData || csvData.length === 0) {
+        alert('Không có dữ liệu CSV. Vui lòng tải file lại.');
+        return;
+    }
+
+    // Collect selected values for each feature
+    const selectedFeatures = {};
+    const selectedTarget = document.getElementById('target-dropdown').value;
+    const targetColumn = dataColumns[dataColumns.length - 1];
+
+    // Check if all features are selected
+    let allFeaturesSelected = true;
+    dataColumns.slice(0, -1).forEach(column => {
+        const featureDropdown = document.getElementById(`feature-${column}`);
+        const selectedValues = Array.from(featureDropdown.selectedOptions).map(option => option.value);
+        
+        if (selectedValues.length === 0) {
+            allFeaturesSelected = false;
+            return;
+        }
+        
+        selectedFeatures[column] = selectedValues[0]; // Take the first selected value
+    });
+
+    // If not all features selected, show error
+    if (!allFeaturesSelected) {
+        alert('Vui lòng chọn giá trị cho tất cả các đặc trưng.');
+        return;
+    }
+
+    // Create a new record
+    const newRecord = dataColumns.reduce((record, column) => {
+        if (column === targetColumn) {
+            record[column] = selectedTarget;
+        } else {
+            record[column] = selectedFeatures[column];
+        }
+        return record;
+    }, {});
+
+    // Decide whether to use original CSV data or existing selected data
+    const dataToDisplay = selectedDataPoints.length > 0 
+        ? [...selectedDataPoints, newRecord] 
+        : [...originalCSVData, newRecord];
+
+    // Add the new record to selectedDataPoints
+    selectedDataPoints.push(newRecord);
+
+    // Update the display
+    displaySelectedData(dataToDisplay);
+
+    // Provide feedback
+    alert(`Đã thêm 1 dòng dữ liệu mới:\n${JSON.stringify(newRecord, null, 2)}`);
+}
+
+function displaySelectedData(data) {
+    const tableHeader = document.getElementById('tableHeader');
+    const tableBody = document.getElementById('tableBody');
+    
+    // Clear existing content
+    tableHeader.innerHTML = '';
+    tableBody.innerHTML = '';
+
+    // If no data, show a message
+    if (!data || data.length === 0) {
+        // Create header row
+        const headerRow = document.createElement('tr');
+        dataColumns.forEach(key => {
+            const th = document.createElement('th');
+            th.textContent = key;
+            headerRow.appendChild(th);
+        });
+        tableHeader.appendChild(headerRow);
+
+        // Create a "No Data" row
+        const noDataRow = document.createElement('tr');
+        const noDataCell = document.createElement('td');
+        noDataCell.textContent = 'Không có dữ liệu';
+        noDataCell.colSpan = dataColumns.length;
+        noDataCell.style.textAlign = 'center';
+        noDataRow.appendChild(noDataCell);
+        tableBody.appendChild(noDataRow);
+        return;
+    }
+
+    // Create header row
+    const headerRow = document.createElement('tr');
+    dataColumns.forEach(key => {
+        const th = document.createElement('th');
+        th.textContent = key;
+        headerRow.appendChild(th);
+    });
+    tableHeader.appendChild(headerRow);
+
+    // Create rows for selected data
+    data.forEach(row => {
+        const tr = document.createElement('tr');
+        dataColumns.forEach(column => {
+            const td = document.createElement('td');
+            td.textContent = row[column];
+            tr.appendChild(td);
+        });
+        tableBody.appendChild(tr);
+    });
+}
+
+
+function runDecisionTree() {
+            // If no data points selected, use all data
+            const dataToUse = selectedDataPoints.length > 0 ? selectedDataPoints : csvData;
+
+            // Get selected criterion
+            const criterionRadios = document.getElementsByName('criterion');
+            let selectedCriterion = 'entropy'; // default
+            for (let radio of criterionRadios) {
+                if (radio.checked) {
+                    selectedCriterion = radio.value;
+                    break;
+                }
+            }
+
+            // Prepare payload
+            const payload = {
+                filepath: currentFilePath,
+                features: dataColumns.slice(0, -1), // All columns except last
+                target: dataColumns[dataColumns.length - 1], // Last column as target
+                selected_data: dataToUse,
+                criterion: selectedCriterion // Add criterion to payload
+            };
+
+            // Send data
+            fetch('/run-decision-tree', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(results => {
+                // Display decision tree plot
+                document.getElementById('decisionTreeImage').src = `data:image/png;base64,${results.decision_tree_plot}`;
+                
+                // Display accuracy
+                document.getElementById('accuracyDisplay').textContent = `Độ chính xác: ${(results.accuracy * 100).toFixed(2)}%`;
+                
+                // Display criterion information
+                const criterionDisplay = document.getElementById('criterionDisplay');
+                criterionDisplay.textContent = `Tiêu chí phân chia: ${selectedCriterion === 'entropy' ? 'Information Gain (Entropy)' : 'Gini Impurity'}`;
+                
+                // Show results panel
+                document.getElementById('resultsPanel').style.display = 'flex';
+            })
+            .catch(error => {
+                console.error('Lỗi chạy thuật toán:', error);
+                alert('Có lỗi xảy ra khi chạy thuật toán: ' + error.message);
+            });
+        }
+
+
+        document.querySelectorAll('input[name="criterion"]').forEach(radio => {
+            radio.addEventListener('change', updateCriterionBadge);
+        });
+
+        function updateCriterionBadge() {
+            const entropyRadio = document.getElementById('entropyRadio');
+            const giniRadio = document.getElementById('giniRadio');
+            const criterionBadge = document.getElementById('criterionBadge');
+
+            if (entropyRadio.checked) {
+                criterionBadge.textContent = 'Information Gain (Entropy)';
+                criterionBadge.className = 'badge bg-primary';
+            } else {
+                criterionBadge.textContent = 'Gini Impurity';
+                criterionBadge.className = 'badge bg-success';
+            }
+        }
+
+        // Call this function initially to set the default badge
+        updateCriterionBadge();
+
+        
+        // Existing event listeners
+        document.getElementById('runDecisionTreeBtn').addEventListener('click', runDecisionTree);
+    </script>
+</body>
+</html>

@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Naive Bayes Prediction</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        .mt-5 {
+            margin-top: 4rem !important;
+        }
+        .selected-values {
+            margin-top: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .selected-value {
+            background-color: #f0f0f0;
+            padding: 5px 10px;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+        }
+
+        .selected-value .remove-btn {
+            margin-left: 10px;
+            color: red;
+            cursor: pointer;
+        }
+
+        .attribute-checkbox-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .attribute-checkbox-container .form-check {
+            margin-right: 15px;
+        }
+
+        #calculationSteps {
+            white-space: pre-wrap;
+            font-family: monospace;
+            background-color: #f4f4f4;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+    </style>
+</head>
+
+<body>
+    <div class="container mt-5">
+        <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4"
+            style="position: fixed; top: 0; width: 100%; z-index: 1000;">
+            <div class="container-fluid">
+                <a class="btn btn-outline-primary" href="/">Trang Chủ</a>
+            </div>
+        </nav>
+
+        <h1 class="mb-4">Dự Đoán Naive Bayes</h1>
+
+        <div class="row">
+            <div class="upload-data col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">Tải Dữ Liệu</div>
+                    <div class="card-body">
+                        <input type="file" id="fileUpload" class="form-control" accept=".csv">
+                        <button onclick="uploadFile()" class="btn btn-primary mt-2">Tải Lên</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row" id="dataSection" style="display:none;">
+            <div class="col-md-7">
+                <div class="card mb-4">
+                    <div class="card-header">Dữ Liệu</div>
+                    <div class="card-body">
+                        <table id="dataTable" class="table table-striped">
+                            <thead id="tableHeader"></thead>
+                            <tbody id="tableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="card mb-4">
+                    <div class="card-header">Dự Đoán</div>
+                    <div class="card-body" id="predictionSection">
+                        <div class="form-check mb-3">
+                            <input type="checkbox" id="laplaceSmoothing" class="form-check-input">
+                            <label class="form-check-label" for="laplaceSmoothing">
+                                Sử Dụng Laplace Smoothing
+                            </label>
+                        </div>
+                        <div id="attributeCheckboxes" class="attribute-checkbox-container mb-3"></div>
+                        <div id="attributeDropdowns"></div>
+                        <div id="selectedValuesContainer" class="selected-values"></div>
+                        <button onclick="predict()" class="btn btn-success mt-3" id="predictButton" disabled>Dự
+                            Đoán</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row" id="resultSection" style="display:none;">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">Kết Quả Dự Đoán</div>
+                    <div class="card-body">
+                        <div class="col-md-1212">
+                            <div class="alert alert-info">
+                                <strong>Kết Quả Dự Đoán:</strong> <span id="predictionText"></span><br>
+                                <strong>Xác Suất:</strong> <span id="predictionProbability"></span>
+                            </div>
+                            <div class="card mt-3">
+                                <div class="card-header">Các Bước Tính</div>
+                                <div class="card-body">
+                                    <pre id="calculationSteps"></pre>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <img id="plotResult" class="img-fluid">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        let uploadedFilePath = '';
+        let columns = [];
+        let uniqueValues = {};
+
+        function uploadFile() {
+            const fileInput = document.getElementById('fileUpload');
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            axios.post('/upload', formData)
+                .then(response => {
+                    uploadedFilePath = response.data.filepath;
+
+                    const data = response.data.data;
+                    columns = response.data.columns;
+
+                    // Hiển thị header
+                    const headerRow = document.getElementById('tableHeader');
+                    headerRow.innerHTML = columns.map(col => `<th>${col}</th>`).join('');
+
+                    // Hiển thị dữ liệu
+                    const tableBody = document.getElementById('tableBody');
+                    tableBody.innerHTML = data.map(row =>
+                        `<tr>${columns.map(col => `<td>${row[col]}</td>`).join('')}</tr>`
+                    ).join('');
+
+                    // Tìm các giá trị duy nhất cho mỗi cột
+                    findUniqueValues(data);
+
+                    // Tạo các checkbox cho việc chọn thuộc tính
+                    createAttributeCheckboxes();
+
+                    // Hiển thị section dữ liệu
+                    document.getElementById('dataSection').style.display = 'flex';
+                })
+                .catch(error => {
+                    alert('Lỗi: ' + error.response.data.error);
+                });
+        }
+
+        function findUniqueValues(data) {
+            uniqueValues = {};
+            columns.slice(0, -1).forEach(col => {
+                uniqueValues[col] = [...new Set(data.map(row => row[col]))];
+            });
+        }
+
+        function createAttributeCheckboxes() {
+            const attributeCheckboxes = document.getElementById('attributeCheckboxes');
+            attributeCheckboxes.innerHTML = ''; // Clear previous checkboxes
+
+            // Tạo checkbox cho mỗi cột trừ cột cuối cùng (target)
+            const featureColumns = columns.slice(0, -1);
+
+            featureColumns.forEach(col => {
+                const checkboxDiv = document.createElement('div');
+                checkboxDiv.className = 'form-check form-check-inline';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `checkbox-${col}`;
+                checkbox.className = 'form-check-input';
+                checkbox.value = col;
+                checkbox.checked = true;
+
+                const label = document.createElement('label');
+                label.className = 'form-check-label';
+                label.htmlFor = `checkbox-${col}`;
+                label.textContent = col;
+
+                checkbox.addEventListener('change', () => {
+                    updateAttributeDropdowns();
+                });
+
+                checkboxDiv.appendChild(checkbox);
+                checkboxDiv.appendChild(label);
+                attributeCheckboxes.appendChild(checkboxDiv);
+            });
+
+            // Update dropdowns after creating checkboxes
+            updateAttributeDropdowns();
+        }
+
+        function updateAttributeDropdowns() {
+            const attributeDropdowns = document.getElementById('attributeDropdowns');
+            const selectedValuesContainer = document.getElementById('selectedValuesContainer');
+            attributeDropdowns.innerHTML = ''; // Clear previous dropdowns
+            selectedValuesContainer.innerHTML = ''; // Clear selected values
+
+            // Lấy các cột được chọn
+            const selectedColumns = Array.from(
+                document.querySelectorAll('#attributeCheckboxes input:checked')
+            ).map(checkbox => checkbox.value);
+
+            // Tạo dropdown cho các cột được chọn
+            selectedColumns.forEach(col => {
+                const colDiv = document.createElement('div');
+                colDiv.className = 'mb-3';
+
+                const label = document.createElement('label');
+                label.textContent = `Chọn giá trị cho ${col}`;
+
+                const select = document.createElement('select');
+                select.id = `dropdown-${col}`;
+                select.className = 'form-select';
+
+                // Thêm option mặc định
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = `Chọn ${col}`;
+                select.appendChild(defaultOption);
+
+                // Thêm các giá trị duy nhất vào dropdown
+                uniqueValues[col].forEach(value => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = value;
+                    select.appendChild(option);
+                });
+
+                // Thêm sự kiện change
+                select.addEventListener('change', (e) => {
+                    if (e.target.value) {
+                        addSelectedValue(col, e.target.value);
+                        e.target.value = ''; // Reset dropdown
+                    }
+                    checkPredictButton();
+                });
+
+                colDiv.appendChild(label);
+                colDiv.appendChild(select);
+                attributeDropdowns.appendChild(colDiv);
+            });
+        }
+
+        function addSelectedValue(column, value) {
+            const selectedValuesContainer = document.getElementById('selectedValuesContainer');
+
+            // Kiểm tra nếu cột này đã có giá trị được chọn
+            const existingValue = document.querySelector(`.selected-value[data-column="${column}"]`);
+            if (existingValue) {
+                existingValue.remove();
+            }
+
+            // Tạo phần tử hiển thị giá trị được chọn
+            const valueElement = document.createElement('div');
+            valueElement.className = 'selected-value';
+            valueElement.setAttribute('data-column', column);
+            valueElement.innerHTML = `
+                <span>${column}: ${value}</span>
+                <span class="remove-btn" onclick="removeSelectedValue(this)">×</span>
+            `;
+
+            selectedValuesContainer.appendChild(valueElement);
+        }
+
+        function removeSelectedValue(removeBtn) {
+            removeBtn.closest('.selected-value').remove();
+            checkPredictButton();
+        }
+
+        function checkPredictButton() {
+            const selectedColumns = Array.from(
+                document.querySelectorAll('#attributeCheckboxes input:checked')
+            ).map(checkbox => checkbox.value);
+            const selectedValues = document.querySelectorAll('.selected-value');
+            const predictButton = document.getElementById('predictButton');
+
+            // Kiểm tra xem đã chọn đủ các thuộc tính được chọn chưa
+            if (selectedValues.length === selectedColumns.length && selectedColumns.length > 0) {
+                predictButton.disabled = false;
+            } else {
+                predictButton.disabled = true;
+            }
+        }
+
+        function predict() {
+            const selectedColumns = Array.from(
+                document.querySelectorAll('#attributeCheckboxes input:checked')
+            ).map(checkbox => checkbox.value);
+            const targetColumn = columns[columns.length - 1];
+
+            const selectedValues = {};
+            document.querySelectorAll('.selected-value').forEach(el => {
+                const column = el.getAttribute('data-column');
+                const value = el.textContent.split(': ')[1].replace('×', '').trim();
+                selectedValues[column] = value;
+            });
+
+            const formData = new FormData();
+
+            // Thêm các features đã chọn
+            for (let feature in selectedValues) {
+                formData.append('features[]', `${feature}:${selectedValues[feature]}`);
+            }
+
+            formData.append('target', targetColumn);
+            formData.append('filepath', uploadedFilePath);
+
+            // Add Laplace smoothing option
+            const useLaplace = document.getElementById('laplaceSmoothing').checked;
+            formData.append('use_laplace', useLaplace);
+
+            axios.post('/predict-naive-bayes', formData)
+                .then(response => {
+                    // Hiển thị kết quả dự đoán
+                    document.getElementById('predictionText').innerHTML = response.data.prediction;
+                    document.getElementById('predictionProbability').innerHTML =
+                        `${(response.data.probability * 100).toFixed(2)}%`;
+
+                    // Hiển thị các bước tính
+                    document.getElementById('calculationSteps').textContent =
+                        response.data.calculation_steps;
+
+                    // Hiển thị plot
+                    document.getElementById('plotResult').src = `data:image/png;base64,${response.data.plot}`;
+
+                    // Hiển thị section kết quả
+                    document.getElementById('resultSection').style.display = 'block';
+                })
+                .catch(error => {
+                    alert('Lỗi: ' + (error.response?.data?.error || error.message));
+                });
+        }   
+    </script>
+</body>
+
+</html>

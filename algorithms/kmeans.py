@@ -1,73 +1,108 @@
+import pandas as pd
+import numpy as np
+import plotly.graph_objs as go
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
-import plotly.express as px
-import plotly.graph_objs as go
+import plotly.io as pio
+import json
 
-# K-means Clustering Algorithm
-def run_kmeans_interactive_3d(df, n_clusters=3):
-    # Select three features for clustering
-    features = ['Annual Income (k$)', 'Spending Score (1-100)', 'Age']
+def run_kmeans_3d_clustering(filepath, n_clusters):
+    try:
+        # Read the CSV file
+        df = pd.read_csv(filepath)
+        
+        # Select numeric columns for clustering
+        numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if len(numeric_columns) < 3:
+            raise ValueError(f"Need at least 3 numeric columns for 3D clustering. Found: {numeric_columns}")
+        
+        # Prepare the data
+        X = df[numeric_columns[:3]]  # Use first 3 numeric columns
+        
+        # Standardize the features
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+        
+        # Perform K-means clustering
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        df['Cluster'] = kmeans.fit_predict(X_scaled)
+        
+        # Create interactive 3D scatter plot with Plotly
+        scatter_traces = []
+        colors = [
+            'red', 'blue', 'green', 'purple', 'orange', 
+            'cyan', 'magenta', 'yellow', 'pink', 'brown'
+        ]
+        
+        # Prepare data for Plotly
+        plot_data = []
+        for i in range(n_clusters):
+            cluster_data = X_scaled[df['Cluster'] == i]
+            plot_data.append({
+                'x': cluster_data[:, 0].tolist(),
+                'y': cluster_data[:, 1].tolist(),
+                'z': cluster_data[:, 2].tolist(),
+                'mode': 'markers',
+                'type': 'scatter3d',
+                'name': f'Cluster {i}',
+                'marker': {
+                    'size': 5,
+                    'color': colors[i % len(colors)],
+                    'opacity': 0.8
+                }
+            })
+        
+        # Centroids
+        centroids_scaled = kmeans.cluster_centers_
+        for i, centroid in enumerate(centroids_scaled):
+            plot_data.append({
+                'x': [centroid[0]],
+                'y': [centroid[1]],
+                'z': [centroid[2]],
+                'mode': 'markers',
+                'type': 'scatter3d',
+                'name': f'Centroid {i}',
+                'marker': {
+                    'size': 10,
+                    'color': colors[i % len(colors)],
+                    'symbol': 'diamond',
+                    'opacity': 1
+                }
+            })
+        
+        # Layout
+        layout = {
+            'title': f'3D K-means Clustering (n_clusters={n_clusters})',
+            'scene': {
+                'xaxis': {'title': numeric_columns[0]},
+                'yaxis': {'title': numeric_columns[1]},
+                'zaxis': {'title': numeric_columns[2]}
+            }
+        }
+        
+        # Prepare cluster summary
+        centroids = scaler.inverse_transform(centroids_scaled)
+        cluster_summary = []
+        for i in range(n_clusters):
+            cluster_data = df[df['Cluster'] == i]
+            cluster_summary.append({
+                'Cluster': i,
+                'Size': len(cluster_data),
+                'Centroids': dict(zip(numeric_columns[:3], centroids[i]))
+            })
+        
+        # Convert DataFrame to records for JSON serialization
+        df_records = df.to_dict('records')
+        
+        return {
+            'plot_data': plot_data,
+            'plot_layout': layout,
+            'data': df_records,
+            'cluster_summary': cluster_summary,
+            'columns': list(df.columns)
+        }
     
-    # Prepare the data
-    X = df[features].values
-    
-    # Standardize the features
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    
-    # Perform K-means clustering
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-    clusters = kmeans.fit_predict(X_scaled)
-    
-    # Create results DataFrame
-    results_df = df.copy()
-    results_df['Cluster'] = clusters
-    
-    # Create interactive 3D scatter plot with Plotly
-    fig = px.scatter_3d(
-        results_df, 
-        x='Annual Income (k$)', 
-        y='Spending Score (1-100)', 
-        z='Age',
-        color='Cluster',
-        title='Interactive 3D Customer Segmentation',
-        labels={'Cluster': 'Cluster Group'},
-        color_continuous_scale=px.colors.sequential.Viridis
-    )
-    
-    # Add cluster centers
-    cluster_centers = scaler.inverse_transform(kmeans.cluster_centers_)
-    center_trace = go.Scatter3d(
-        x=cluster_centers[:, 0], 
-        y=cluster_centers[:, 1], 
-        z=cluster_centers[:, 2],
-        mode='markers',
-        marker=dict(
-            color='red', 
-            size=10, 
-            symbol='cross',
-            line=dict(color='red', width=3)
-        ),
-        name='Centroids'
-    )
-    fig.add_trace(center_trace)
-    
-    # Customize layout for better centering and interactivity
-    fig.update_layout(
-        scene=dict(
-            xaxis_title='Annual Income (k$)',
-            yaxis_title='Spending Score',
-            zaxis_title='Age',
-            # Center the camera
-            camera=dict(
-                eye=dict(x=1.5, y=1.5, z=1.5)
-            )
-        ),
-        margin=dict(l=0, r=0, t=30, b=0),  # Reduce margins
-        height=750,
-        width=1000,
-        # Ensure plot is centered
-        autosize=True
-    )
-    
-    return fig, results_df
+    except Exception as e:
+        print(f"Error in clustering: {str(e)}")
+        raise

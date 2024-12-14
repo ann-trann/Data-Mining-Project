@@ -1,162 +1,166 @@
-from sklearn.preprocessing import LabelEncoder
+import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.preprocessing import LabelEncoder
+import io
+import base64
 
-# Naive Bayes Algorithm
-def manual_naive_bayes_calculation(df, new_sample, use_laplace=False):
-    # Prepare calculation steps
-    calculation_steps = []
+def plot_to_base64(plt):
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
+    buffer.seek(0)
+    plot_data = base64.b64encode(buffer.getvalue()).decode()
+    plt.close()
+    return plot_data
+
+def create_feature_distribution_plot(df, target):
+    # Set up the matplotlib figure
+    plt.figure(figsize=(16, 10))
+    plt.suptitle(f'Feature Distribution by {target}', fontsize=16)
     
-    # Encode categorical features
-    le_dict = {}
-    df_encoded = df.copy()
-    for column in df_encoded.columns:
-        le = LabelEncoder()
-        df_encoded[column] = le.fit_transform(df_encoded[column])
-        le_dict[column] = le
+    # Get all features except the target
+    features = [col for col in df.columns if col != target]
     
-    # Target column (Play ball)
-    target_column = 'Play ball'
-    
-    # Separate features and target
-    X = df_encoded.drop(target_column, axis=1)
-    y = df_encoded[target_column]
-    
-    # Encode new sample
-    new_sample_encoded = {}
-    for col, val in new_sample.items():
-        new_sample_encoded[col] = le_dict[col].transform([val])[0]
-    
-    # Calculate class probabilities
-    class_names = le_dict[target_column].classes_
-    class_probs = {}
-    class_counts = {}
-    total_samples = len(y)
-    
-    for class_name in class_names:
-        class_index = le_dict[target_column].transform([class_name])[0]
-        class_count = (y == class_index).sum()
-        class_prob = class_count / total_samples
-        class_probs[class_name] = class_prob
-        class_counts[class_name] = class_count
+    # Create subplots for each feature
+    for i, feature in enumerate(features, 1):
+        plt.subplot(2, 2, i)
         
-        calculation_steps.append(f"P(C{class_name.lower()}) = {class_count}/{total_samples} = {class_prob:.3f}")
-    
-    # Calculate feature probabilities for each class
-    feature_probs = {}
-    for class_name in class_names:
-        class_index = le_dict[target_column].transform([class_name])[0]
-        class_data = df_encoded[y == class_index]
-        
-        class_feature_probs = {}
-        for col in X.columns:
-            feature_val = new_sample_encoded[col]
-            
-            # Laplace smoothing
-            if use_laplace:
-                unique_feature_count = len(le_dict[col].classes_)
-                feature_count = (class_data[col] == feature_val).sum() + 1
-                feature_prob = feature_count / (class_counts[class_name] + unique_feature_count)
-                calculation_steps.append(
-                    f"P({col} = {le_dict[col].inverse_transform([feature_val])[0]} | C{class_name.lower()}) = "
-                    f"({(class_data[col] == feature_val).sum()} + 1) / "
-                    f"({class_counts[class_name]} + {unique_feature_count}) = {feature_prob:.3f}"
-                )
-            else:
-                # Without Laplace smoothing
-                feature_count = (class_data[col] == feature_val).sum()
-                feature_prob = feature_count / class_counts[class_name]
-                calculation_steps.append(
-                    f"P({col} = {le_dict[col].inverse_transform([feature_val])[0]} | C{class_name.lower()}) = "
-                    f"{feature_count}/{class_counts[class_name]} = {feature_prob:.3f}"
-                )
-            
-            class_feature_probs[col] = feature_prob
-        
-        feature_probs[class_name] = class_feature_probs
-    
-    # Calculate final probabilities
-    final_probs = {}
-    for class_name in class_names:
-        # Multiply all feature probabilities
-        feature_prob_prod = 1
-        for col in X.columns:
-            feature_prob_prod *= feature_probs[class_name][col]
-        
-        # Multiply by class probability
-        final_prob = feature_prob_prod * class_probs[class_name]
-        final_probs[class_name] = final_prob
-        
-        calculation_steps.append(
-            f"P(X|C{class_name.lower()}) * P(C{class_name.lower()}) = "
-            f"{feature_prob_prod:.3f} * {class_probs[class_name]:.3f} = {final_prob:.3f}"
+        # Use seaborn for a more aesthetic plot
+        sns.countplot(
+            data=df, 
+            x=feature, 
+            hue=target, 
+            palette='Set2'
         )
-    
-    # Determine prediction
-    prediction = max(final_probs, key=final_probs.get)
-    calculation_steps.append(f"\nPredicted Class: {prediction}")
-    
-    return calculation_steps, prediction
-
-def run_naive_bayes(df, outlook=None, temperature=None, humidity=None, wind=None, use_laplace=False):
-    # If a new sample is provided, process it
-    if all([outlook, temperature, humidity, wind]):
-        return process_new_sample(df, outlook, temperature, humidity, wind, use_laplace)
-    
-    # Otherwise, show default visualization
-    plt.figure(figsize=(16, 6))
-    
-    # Subplot for calculation steps
-    plt.subplot(1, 2, 1)
-    plt.text(0.5, 0.5, "Add a new sample\nto see Naive Bayes\ncalculation steps", 
-             horizontalalignment='center', 
-             verticalalignment='center', 
-             fontsize=10)
-    plt.title('Calculation Steps')
-    plt.axis('off')
-    
-    # Subplot for visualization
-    plt.subplot(1, 2, 2)
-    # Basic visualization of data distribution
-    plt.title('Naive Bayes Visualization')
+        
+        plt.title(f'{feature} Distribution')
+        plt.xlabel(feature)
+        plt.ylabel('Count')
+        plt.xticks(rotation=45)
+        
+        # Only show legend for the first subplot to avoid repetition
+        if i == 1:
+            plt.legend(title=target, bbox_to_anchor=(1.05, 1), loc='upper left')
+        else:
+            plt.legend([],[], frameon=False)
     
     plt.tight_layout()
-    return plt.gcf()
+    return plot_to_base64(plt)
 
-# Modified to handle new sample input with Laplace smoothing
-def process_new_sample(df, outlook, temperature, humidity, wind, use_laplace=False):
-    new_sample = {
-        'Outlook': outlook,
-        'Temperature': temperature,
-        'Humidity': humidity,
-        'Wind': wind
+def predict_naive_bayes(filepath, features, target, use_laplace=False):
+    # Read the CSV file
+    df = pd.read_csv(filepath)
+    
+    # Normalize column names (remove underscores if added during upload)
+    df.columns = [col.replace('_', ' ') for col in df.columns]
+    
+    # Normalize target name
+    target = target.replace('_', ' ')
+    
+    # Parse selected features
+    selected_features = {}
+    for feature_str in features:
+        feature, value = feature_str.split(':')
+        # Normalize feature name
+        feature = feature.replace('_', ' ')
+        selected_features[feature] = value
+    
+    # Prepare the subset of data with selected features
+    X = df[[feature for feature in selected_features.keys()]]
+    y = df[target]
+    
+    # Prepare label encoder for target
+    le_target = LabelEncoder()
+    y_encoded = le_target.fit_transform(y)
+    
+    # Prepare feature encoders
+    encoders = {}
+    X_encoded = []
+    
+    # Encode each selected feature
+    for feature in X.columns:
+        le = LabelEncoder()
+        encoded_feature = le.fit_transform(X[feature])
+        encoders[feature] = le
+        X_encoded.append(encoded_feature)
+    
+    # Transpose to get correct shape for Naive Bayes
+    X_encoded = np.array(X_encoded).T
+    
+    # Train Naive Bayes with optional Laplace smoothing
+    nb_model = MultinomialNB(alpha=1.0 if use_laplace else 0.0)
+    nb_model.fit(X_encoded, y_encoded)
+    
+    # Prepare prediction data
+    prediction_input = []
+    for feature in X.columns:
+        # Find the encoded value for the selected feature
+        encoded_value = encoders[feature].transform([selected_features[feature]])[0]
+        prediction_input.append(encoded_value)
+    
+    # Reshape prediction input
+    prediction_input = np.array(prediction_input).reshape(1, -1)
+    
+    # Predict
+    prediction_encoded = nb_model.predict(prediction_input)
+    prediction = le_target.inverse_transform(prediction_encoded)[0]
+    
+    # Get probabilities
+    probabilities = nb_model.predict_proba(prediction_input)
+    max_prob_index = np.argmax(probabilities)
+    max_probability = probabilities[0][max_prob_index]
+    
+    # Calculation steps for explanation
+    def format_calculation_steps(X_encoded, y_encoded, prediction_input, nb_model, le_target):
+        steps = []
+        
+        # Prior probabilities
+        class_counts = np.bincount(y_encoded)
+        total_samples = len(y_encoded)
+        prior_probs = class_counts / total_samples
+        
+        steps.append("Prior Probabilities:")
+        for cls, prob in zip(le_target.classes_, prior_probs):
+            steps.append(f"P({target} = {cls}) = {prob:.4f}")
+        
+        # Likelihood calculation
+        steps.append("\nLikelihood Calculation:")
+        for i, input_val in enumerate(prediction_input[0]):
+            feature_name = X.columns[i]
+            feature_val = selected_features[feature_name]
+            
+            for cls_idx, cls in enumerate(le_target.classes_):
+                # Count occurrences of this feature value for this class
+                class_mask = y_encoded == cls_idx
+                feature_mask = X_encoded[:, i] == input_val
+                feature_class_count = np.sum(class_mask & feature_mask)
+                total_class_count = np.sum(class_mask)
+                
+                # Optional Laplace smoothing
+                if use_laplace:
+                    unique_feature_vals = len(np.unique(X_encoded[:, i]))
+                    likelihood = (feature_class_count + 1) / (total_class_count + unique_feature_vals)
+                    steps.append(f"  P({feature_name} = {feature_val} | {target} = {cls}) = ({feature_class_count} + 1) / ({total_class_count} + {unique_feature_vals}) = {likelihood:.4f}")
+                else:
+                    likelihood = feature_class_count / total_class_count
+                    steps.append(f"  P({feature_name} = {feature_val} | {target} = {cls}) = {feature_class_count} / {total_class_count} = {likelihood:.4f}")
+        
+        # Final prediction probability
+        steps.append("\nFinal Prediction Probability:")
+        steps.append(f"Predicted {target}: {prediction}")
+        steps.append(f"Probability: {max_probability:.4f}")
+        
+        return "\n".join(steps)
+    
+    # Create visualization
+    plot_data = create_feature_distribution_plot(df, target)
+    calculation_text = format_calculation_steps(X_encoded, y_encoded, prediction_input, nb_model, le_target)
+    
+    return {
+        "prediction": prediction,
+        "probability": float(max_probability),
+        "plot": plot_data,
+        "calculation_steps": calculation_text
     }
-    
-    # Perform Naive Bayes calculation
-    calculation_steps, prediction = manual_naive_bayes_calculation(df, new_sample, use_laplace)
-    
-    # Prepare calculation steps for display
-    calculation_text = "\n".join(calculation_steps)
-    
-    # Visualization with calculation steps
-    plt.figure(figsize=(16, 6))
-    
-    # Subplot for calculation steps
-    plt.subplot(1, 2, 1)
-    plt.text(0.2, 0.5, calculation_text, 
-             horizontalalignment='left', 
-             verticalalignment='center', 
-             fontsize=12, 
-             family='monospace')
-    plt.title(f'Naive Bayes Calculation Steps\n{"(Laplace Smoothing)" if use_laplace else ""}')
-    plt.axis('off')
-    
-    # Subplot for visualization
-    plt.subplot(1, 2, 2)
-    # Basic visualization of data distribution
-    feature_counts = df.groupby('Play ball').size()
-    plt.bar(feature_counts.index, feature_counts.values)
-    plt.title(f'Class Distribution\n{"(Laplace Smoothing)" if use_laplace else ""}')
-    plt.ylabel('Count')
-    
-    plt.tight_layout()
-    return plt.gcf()
