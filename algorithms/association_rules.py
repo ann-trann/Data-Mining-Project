@@ -174,8 +174,10 @@ def run_association_rules(df, min_support=0.5):
     # Format results
     frequent_itemsets_text = format_frequent_itemsets(frequent_itemsets)
     association_rules_text = format_association_rules(pd.DataFrame(transactions), min_support)
+    maximal_frequent_itemsets_text = find_maximal_frequent_itemsets(frequent_itemsets)
 
-    return plot_base64, frequent_itemsets_text, association_rules_text
+    return plot_base64, frequent_itemsets_text, association_rules_text, maximal_frequent_itemsets_text
+
 
 # Thêm hàm format_frequent_itemsets để hoàn thiện
 def format_frequent_itemsets(frequent_itemsets):
@@ -218,3 +220,45 @@ def clean_and_filter_itemsets(itemsets):
 
 
 
+
+def find_maximal_frequent_itemsets(frequent_itemsets):
+    # Convert itemsets to list of tuples with frozenset and support
+    itemset_list = [
+        (frozenset(row['itemsets']), row['support']) 
+        for _, row in frequent_itemsets.iterrows() 
+        if len(row['itemsets']) > 0
+    ]
+    
+    # Find maximal frequent itemsets
+    maximal_itemsets = []
+    for i, (itemset1, support1) in enumerate(itemset_list):
+        is_maximal = True
+        for j, (itemset2, support2) in enumerate(itemset_list):
+            if i != j:
+                # Check if itemset1 is a subset of itemset2 AND support2 is not lower
+                if itemset1.issubset(itemset2) and support2 >= support1:
+                    is_maximal = False
+                    break
+        
+        if is_maximal:
+            maximal_itemsets.append((itemset1, support1))
+    
+    # Find the itemsets with the maximum length among maximal itemsets
+    max_length = max(len(itemset) for itemset, _ in maximal_itemsets)
+    
+    # Filter to keep only the maximal itemsets with maximum length
+    true_maximal_itemsets = [
+        (itemset, support) for (itemset, support) in maximal_itemsets 
+        if len(itemset) == max_length
+    ]
+    
+    # Format maximal itemsets
+    maximal_frequent_itemsets_str = []
+    for itemset, support in true_maximal_itemsets:
+        # Convert itemset to sorted list of strings
+        itemset_str = '{' + ', '.join(sorted(str(item) for item in itemset)) + '}'
+        maximal_frequent_itemsets_str.append(
+            f"Tập phổ biến tối đại: {itemset_str}: {support:.2f}"
+        )
+    
+    return '\n'.join(maximal_frequent_itemsets_str)

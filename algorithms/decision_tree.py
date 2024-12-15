@@ -42,12 +42,24 @@ def run_decision_tree_analysis(data, features, target, criterion='entropy'):
     target_encoder = LabelEncoder()
     y_encoded = target_encoder.fit_transform(y)
     
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(X_encoded, y_encoded, test_size=0.2, random_state=42)
+    # Handle small dataset scenarios
+    if len(df) <= 5:  # If very small dataset
+        # Use entire dataset for training and testing
+        X_train, X_test = X_encoded, X_encoded
+        y_train, y_test = y_encoded, y_encoded
+        
+        # Warn about limited training data
+        print("Warning: Small dataset. Training on entire dataset.")
+    else:
+        # Normal train-test split
+        X_train, X_test, y_train, y_test = train_test_split(X_encoded, y_encoded, test_size=0.2, random_state=42)
     
     # Train Decision Tree with selected criterion
     dt_classifier = DecisionTreeClassifier(random_state=42, criterion=criterion)
     dt_classifier.fit(X_train, y_train)
+    
+    # Compute accuracy (handle potential zero-division)
+    accuracy = dt_classifier.score(X_test, y_test) if len(X_test) > 0 else 0.0
     
     # Visualize Decision Tree
     fig, ax = plt.subplots(figsize=(20,10))
@@ -74,7 +86,7 @@ def run_decision_tree_analysis(data, features, target, criterion='entropy'):
     
     # Prepare results
     results = {
-        "accuracy": float(dt_classifier.score(X_test, y_test)),
+        "accuracy": float(accuracy),
         "feature_importance": {
             features[i]: float(feature_importance[i]) 
             for i in range(len(features))

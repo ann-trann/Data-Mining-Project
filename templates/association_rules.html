@@ -91,6 +91,12 @@
                                         <pre id="frequentItemsets"></pre>
                                     </div>
                                 </div>
+                                <div class="card mb-3">
+                                    <div class="card-header">Maximal Frequent Itemsets</div>
+                                    <div class="card-body">
+                                        <pre id="maximalFrequentItemsets"></pre>
+                                    </div>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="card mb-3">
@@ -160,6 +166,9 @@
 
                 // Hiển thị frequent itemsets
                 document.getElementById('frequentItemsets').textContent = response.data.frequent_itemsets;
+
+                // Hiển thị maximal frequent itemsets
+                document.getElementById('maximalFrequentItemsets').textContent = response.data.maximal_frequent_itemsets;
 
                 // Hiển thị association rules
                 document.getElementById('associationRules').textContent = response.data.association_rules;

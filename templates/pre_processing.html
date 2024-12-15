@@ -156,13 +156,60 @@
                 .then(response => {
                     // Display descriptive statistics
                     const descriptiveStatsBody = document.getElementById('descriptiveStatsBody');
-                    descriptiveStatsBody.innerHTML = Object.entries(response.data.descriptive_stats)
-                        .map(([key, value]) => `
-                            <tr>
-                                <td>${key}</td>
-                                <td>${typeof value === 'object' ? JSON.stringify(value) : value}</td>
-                            </tr>
-                        `).join('');
+                    descriptiveStatsBody.innerHTML = '';  // Clear previous content
+
+                    // Process Numeric Columns
+                    if (response.data.descriptive_stats['Numeric Columns']) {
+                        const numericTitle = document.createElement('tr');
+                        numericTitle.innerHTML = `<th colspan="2" class="bg-light text-primary">Numeric Columns</th>`;
+                        descriptiveStatsBody.appendChild(numericTitle);
+
+                        Object.entries(response.data.descriptive_stats['Numeric Columns']).forEach(([column, stats]) => {
+                            // Column name row
+                            const columnNameRow = document.createElement('tr');
+                            columnNameRow.innerHTML = `<th colspan="2" class="bg-light">${column}</th>`;
+                            descriptiveStatsBody.appendChild(columnNameRow);
+
+                            // Individual stats rows
+                            Object.entries(stats).forEach(([statName, statValue]) => {
+                                const statRow = document.createElement('tr');
+                                statRow.innerHTML = `
+                                    <td>${statName}</td>
+                                    <td>${statValue}</td>
+                                `;
+                                descriptiveStatsBody.appendChild(statRow);
+                            });
+                        });
+                    }
+
+                    // Process Categorical Columns
+                    if (response.data.descriptive_stats['Categorical Columns']) {
+                        const categoricalTitle = document.createElement('tr');
+                        categoricalTitle.innerHTML = `<th colspan="2" class="bg-light text-primary">Categorical Columns</th>`;
+                        descriptiveStatsBody.appendChild(categoricalTitle);
+
+                        Object.entries(response.data.descriptive_stats['Categorical Columns']).forEach(([column, stats]) => {
+                            // Column name row
+                            const columnNameRow = document.createElement('tr');
+                            columnNameRow.innerHTML = `<th colspan="2" class="bg-light">${column}</th>`;
+                            descriptiveStatsBody.appendChild(columnNameRow);
+
+                            // Individual stats rows
+                            Object.entries(stats).forEach(([statName, statValue]) => {
+                                // Special handling for Value Frequencies
+                                let displayValue = statName === 'Value Frequencies' 
+                                    ? JSON.stringify(statValue).replace(/"/g, '').replace(/,/g, ', ') 
+                                    : statValue;
+
+                                const statRow = document.createElement('tr');
+                                statRow.innerHTML = `
+                                    <td>${statName}</td>
+                                    <td>${displayValue}</td>
+                                `;
+                                descriptiveStatsBody.appendChild(statRow);
+                            });
+                        });
+                    }
 
                     // Display missing values
                     const missingValuesBody = document.getElementById('missingValuesBody');
@@ -194,6 +241,7 @@
                     alert('Lỗi: ' + error.response.data.error);
                 });
         }
+
     </script>
 </body>
 </html>

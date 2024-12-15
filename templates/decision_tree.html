@@ -26,15 +26,15 @@
         }
         .criterion-selection {
             margin-bottom: 15px;
-        }
-
-        .criterion-selection {
             display: block !important;
             visibility: visible !important;
         }
 
         #criterionBadge {
             font-size: 0.9rem;
+            margin-left: 10px;
+        }
+        #runDecisionTreeBtn {
             margin-left: 10px;
         }
     </style>
@@ -80,29 +80,31 @@
             </div>
 
             <div class="col-md-4">
+
+                <div class="criterion-selection visible">
+                    <label class="form-label">Tiêu Chí Phân Chia:</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="criterion" id="entropyRadio" value="entropy" checked>
+                        <label class="form-check-label" for="entropyRadio">
+                            Information Gain (Entropy)
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="criterion" id="giniRadio" value="gini">
+                        <label class="form-check-label" for="giniRadio">
+                            Gini Impurity
+                        </label>
+                    </div>
+                </div>
+
+
                 <div class="card">
                     <div class="card-header">Chọn Đặc Trưng</div>
                     <div class="card-body" id="featureSelectionContainer">
-                        <!-- Criterion Selection -->
-                        <div class="criterion-selection">
-                            <label class="form-label">Tiêu Chí Phân Chia:</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="criterion" id="entropyRadio" value="entropy" checked>
-                                <label class="form-check-label" for="entropyRadio">
-                                    Information Gain (Entropy)
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="criterion" id="giniRadio" value="gini">
-                                <label class="form-check-label" for="giniRadio">
-                                    Gini Impurity
-                                </label>
-                            </div>
-                        </div>
-
+                        
                         <!-- Dynamic feature dropdowns will be created here -->
                         <div class="d-grid gap-2 mt-3">
-                            <button id="runDecisionTreeBtn" class="btn btn-primary">Chạy Decision Tree</button>
+                            <button id="runDecisionTreeBtn" class="btn btn-primary mt-2">Chạy Decision Tree</button>
                         </div>
                     </div>
                 </div>
@@ -137,6 +139,7 @@
         let currentFilePath = null;
         let dataColumns = [];
         let selectedDataPoints = [];
+        let originalCSVData = [];
         
         function uploadFile() {
             const fileInput = document.getElementById('fileUpload');
@@ -177,7 +180,7 @@
                 csvData = response.data.data;
 
                 // Store original CSV data
-                originalCSVData = [...csvData];
+                // originalCSVData = [...csvData];
                 
                 // Validate data
                 if (!csvData || csvData.length === 0) {
@@ -220,6 +223,8 @@
                 uploadBtn.disabled = false;
                 uploadBtn.innerHTML = 'Tải Lên';
             });
+            
+            originalCSVData = [...csvData];
         }
 
         function createFeatureDropdowns(data) {
@@ -252,7 +257,7 @@
                 const select = document.createElement('select');
                 select.id = `feature-${column}`;
                 select.className = 'form-select';
-                select.multiple = true;
+                // select.multiple = true;
 
                 // Populate dropdown with unique values
                 uniqueValues.forEach(value => {
@@ -296,7 +301,7 @@
             const container = document.getElementById('featureSelectionContainer');
             const addDataButton = document.createElement('button');
             addDataButton.textContent = 'Thêm Dữ Liệu Đã Chọn';
-            addDataButton.className = 'btn btn-success mt-2';
+            addDataButton.className = 'btn btn-primary mt-2';
             addDataButton.id = 'addSelectedDataBtn';
             addDataButton.addEventListener('click', addSelectedData);
             
@@ -338,117 +343,122 @@
 
 
         function addSelectedData() {
-    // Verify data exists
-    if (!csvData || csvData.length === 0) {
-        alert('Không có dữ liệu CSV. Vui lòng tải file lại.');
-        return;
-    }
+            // Verify data exists
+            if (!csvData || csvData.length === 0) {
+                alert('Không có dữ liệu CSV. Vui lòng tải file lại.');
+                return;
+            }
 
-    // Collect selected values for each feature
-    const selectedFeatures = {};
-    const selectedTarget = document.getElementById('target-dropdown').value;
-    const targetColumn = dataColumns[dataColumns.length - 1];
+            // Collect selected values for each feature
+            const selectedFeatures = {};
+            const selectedTarget = document.getElementById('target-dropdown').value;
+            const targetColumn = dataColumns[dataColumns.length - 1];
 
-    // Check if all features are selected
-    let allFeaturesSelected = true;
-    dataColumns.slice(0, -1).forEach(column => {
-        const featureDropdown = document.getElementById(`feature-${column}`);
-        const selectedValues = Array.from(featureDropdown.selectedOptions).map(option => option.value);
-        
-        if (selectedValues.length === 0) {
-            allFeaturesSelected = false;
-            return;
+            // Collect selected feature values
+            let allFeaturesSelected = true;
+            dataColumns.slice(0, -1).forEach(column => {
+                const featureDropdown = document.getElementById(`feature-${column}`);
+                const selectedValues = Array.from(featureDropdown.selectedOptions).map(option => option.value);
+                
+                if (selectedValues.length === 0) {
+                    allFeaturesSelected = false;
+                    return;
+                }
+                
+                selectedFeatures[column] = selectedValues[0]; // Take the first selected value
+            });
+
+            // If not all features selected, show error
+            if (!allFeaturesSelected) {
+                alert('Vui lòng chọn giá trị cho tất cả các đặc trưng.');
+                return;
+            }
+
+            // Combine all data into a single record
+            const newRecord = {};
+            dataColumns.forEach(column => {
+                if (column === targetColumn) {
+                    // Use selected target value for the target column
+                    newRecord[column] = selectedTarget;
+                } else {
+                    // Use selected feature values for other columns
+                    newRecord[column] = selectedFeatures[column];
+                }
+            });
+
+            // Add the new record to selectedDataPoints
+            selectedDataPoints.push(newRecord);
+
+            // Combine original CSV data with selected data points
+            const combinedData = [...csvData, ...selectedDataPoints];
+
+            // Update the display with all records
+            displaySelectedData(combinedData);
+
+            // Provide feedback
+            alert(`Đã thêm 1 dòng dữ liệu mới:\n${JSON.stringify(newRecord, null, 2)}`);
         }
-        
-        selectedFeatures[column] = selectedValues[0]; // Take the first selected value
-    });
 
-    // If not all features selected, show error
-    if (!allFeaturesSelected) {
-        alert('Vui lòng chọn giá trị cho tất cả các đặc trưng.');
-        return;
-    }
+        function displaySelectedData(data) {
+            const tableHeader = document.getElementById('tableHeader');
+            const tableBody = document.getElementById('tableBody');
+            
+            // Clear existing table body
+            tableBody.innerHTML = '';
 
-    // Create a new record
-    const newRecord = dataColumns.reduce((record, column) => {
-        if (column === targetColumn) {
-            record[column] = selectedTarget;
-        } else {
-            record[column] = selectedFeatures[column];
+            // If no data, show a message
+            if (!data || data.length === 0) {
+                const noDataRow = document.createElement('tr');
+                const noDataCell = document.createElement('td');
+                noDataCell.textContent = 'Không có dữ liệu';
+                noDataCell.colSpan = dataColumns.length;
+                noDataCell.style.textAlign = 'center';
+                noDataRow.appendChild(noDataCell);
+                tableBody.appendChild(noDataRow);
+                return;
+            }
+
+            // If first time calling this function, create header
+            if (tableHeader.children.length === 0) {
+                const headerRow = document.createElement('tr');
+                dataColumns.forEach(key => {
+                    const th = document.createElement('th');
+                    th.textContent = key;
+                    headerRow.appendChild(th);
+                });
+                tableHeader.appendChild(headerRow);
+            }
+
+            // Add all rows to the table body
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                
+                // Ensure we iterate through ALL columns
+                dataColumns.forEach(column => {
+                    const td = document.createElement('td');
+                    
+                    // Check if the column exists in the row, if not, use an empty string
+                    td.textContent = row.hasOwnProperty(column) ? row[column] : '';
+                    
+                    tr.appendChild(td);
+                });
+                
+                tableBody.appendChild(tr);
+            });
         }
-        return record;
-    }, {});
-
-    // Decide whether to use original CSV data or existing selected data
-    const dataToDisplay = selectedDataPoints.length > 0 
-        ? [...selectedDataPoints, newRecord] 
-        : [...originalCSVData, newRecord];
-
-    // Add the new record to selectedDataPoints
-    selectedDataPoints.push(newRecord);
-
-    // Update the display
-    displaySelectedData(dataToDisplay);
-
-    // Provide feedback
-    alert(`Đã thêm 1 dòng dữ liệu mới:\n${JSON.stringify(newRecord, null, 2)}`);
-}
-
-function displaySelectedData(data) {
-    const tableHeader = document.getElementById('tableHeader');
-    const tableBody = document.getElementById('tableBody');
-    
-    // Clear existing content
-    tableHeader.innerHTML = '';
-    tableBody.innerHTML = '';
-
-    // If no data, show a message
-    if (!data || data.length === 0) {
-        // Create header row
-        const headerRow = document.createElement('tr');
-        dataColumns.forEach(key => {
-            const th = document.createElement('th');
-            th.textContent = key;
-            headerRow.appendChild(th);
-        });
-        tableHeader.appendChild(headerRow);
-
-        // Create a "No Data" row
-        const noDataRow = document.createElement('tr');
-        const noDataCell = document.createElement('td');
-        noDataCell.textContent = 'Không có dữ liệu';
-        noDataCell.colSpan = dataColumns.length;
-        noDataCell.style.textAlign = 'center';
-        noDataRow.appendChild(noDataCell);
-        tableBody.appendChild(noDataRow);
-        return;
-    }
-
-    // Create header row
-    const headerRow = document.createElement('tr');
-    dataColumns.forEach(key => {
-        const th = document.createElement('th');
-        th.textContent = key;
-        headerRow.appendChild(th);
-    });
-    tableHeader.appendChild(headerRow);
-
-    // Create rows for selected data
-    data.forEach(row => {
-        const tr = document.createElement('tr');
-        dataColumns.forEach(column => {
-            const td = document.createElement('td');
-            td.textContent = row[column];
-            tr.appendChild(td);
-        });
-        tableBody.appendChild(tr);
-    });
-}
 
 
-function runDecisionTree() {
-            // If no data points selected, use all data
-            const dataToUse = selectedDataPoints.length > 0 ? selectedDataPoints : csvData;
+        function runDecisionTree() {
+            // Always use the full dataset displayed in the table
+            const tableBody = document.getElementById('tableBody');
+            const dataToUse = Array.from(tableBody.querySelectorAll('tr'))
+                .map(row => {
+                    const rowData = {};
+                    Array.from(row.querySelectorAll('td')).forEach((cell, index) => {
+                        rowData[dataColumns[index]] = cell.textContent;
+                    });
+                    return rowData;
+                });
 
             // Get selected criterion
             const criterionRadios = document.getElementsByName('criterion');
@@ -502,6 +512,7 @@ function runDecisionTree() {
                 alert('Có lỗi xảy ra khi chạy thuật toán: ' + error.message);
             });
         }
+
 
 
         document.querySelectorAll('input[name="criterion"]').forEach(radio => {

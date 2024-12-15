@@ -1,11 +1,13 @@
 import os
 from flask import Flask, render_template, request, jsonify
 import pandas as pd
+from algorithms.pre_processing import generate_descriptive_stats
 from algorithms.association_rules import run_association_rules
 from algorithms.reduct import perform_rough_set_analysis
 from algorithms.naive_bayes import predict_naive_bayes
 from algorithms.decision_tree import run_decision_tree_analysis
 from algorithms.kmeans import run_kmeans_3d_clustering
+
 
 app = Flask(__name__)
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
@@ -105,15 +107,11 @@ def preprocess_data():
         # Read the CSV file
         df = pd.read_csv(data['filepath'])
         
-        # Descriptive Statistics
-        descriptive_stats = {
-            'Numeric Columns': df.describe().to_dict(),
-            'Categorical Columns': df.describe(include=['object']).to_dict()
-        }
+        # Generate descriptive statistics
+        descriptive_stats = generate_descriptive_stats(df)
         
         # Handle missing values
-        # 1. Check missing values
-        missing_values = df.isnull().sum().to_dict()
+        missing_values = {str(k): int(v) for k, v in df.isnull().sum().to_dict().items()}
         
         # 2. Imputation strategy
         # Numeric columns: fill with mean
@@ -160,16 +158,16 @@ def run_association_rules_route():
         min_support = data.get('min_support', 0.5)
         
         # Run association rules analysis
-        plot_base64, frequent_itemsets, association_rules = run_association_rules(
+        plot_base64, frequent_itemsets, association_rules, maximal_frequent_itemsets = run_association_rules(
             df, 
             min_support=min_support
         )
         
-        
         return jsonify({
             "plot": plot_base64,
             "frequent_itemsets": frequent_itemsets,
-            "association_rules": association_rules
+            "association_rules": association_rules,
+            "maximal_frequent_itemsets": maximal_frequent_itemsets
         })
     
     except ValueError as ve:
