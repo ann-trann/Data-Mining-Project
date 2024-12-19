@@ -2,19 +2,21 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Reduct</title>
+    <title>Phân tích Tập thô</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
-        .mt-5 {
-            margin-top: 4rem !important;
-        }
+        .mt-5 { margin-top: 4rem !important; }
         #resultSection pre {
             white-space: pre-wrap;
             word-wrap: break-word;
             background-color: #f4f4f4;
             padding: 15px;
             border-radius: 5px;
+            margin-top: 10px;
+        }
+        .result-card {
+            margin-bottom: 20px;
         }
     </style>
 </head>
@@ -27,65 +29,90 @@
             </div>
         </nav>
 
-        <h1 class="mb-4">Reduct (Tập thô)</h1>
+        <h1 class="mb-4">Phân tích Tập thô</h1>
 
-        <div class="row">
-            <div class="upload-data col-md-6">
-                <div class="card mb-4">
-                    <div class="card-header">Tải Dữ Liệu</div>
+        <!-- Upload Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">Tải lên dữ liệu</div>
                     <div class="card-body">
                         <input type="file" id="fileUpload" class="form-control" accept=".csv">
-                        <button onclick="uploadFile()" class="btn btn-primary mt-2">Tải Lên</button>
+                        <button onclick="uploadFile()" class="btn btn-primary mt-2">Tải lên</button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="row" id="dataSection" style="display:none;">
+        <!-- Data and Analysis Section -->
+        <div class="row" id="mainContent" style="display: none;">
+            <!-- Data Table -->
             <div class="col-md-8">
-                <div class="card mb-4">
-                    <div class="card-header">Dữ Liệu</div>
+                <div class="card">
+                    <div class="card-header">Dữ liệu</div>
                     <div class="card-body">
-                        <table id="dataTable" class="table table-striped">
-                            <thead id="tableHeader"></thead>
-                            <tbody id="tableBody"></tbody>
-                        </table>
+                        <div class="table-responsive">
+                            <table id="dataTable" class="table table-striped">
+                                <thead id="tableHeader"></thead>
+                                <tbody id="tableBody"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Analysis Button -->
             <div class="col-md-4">
-                <div class="card mb-4">
-                    <div class="card-header">Phân Tích</div>
+                <div class="card">
+                    <div class="card-header">Phân tích</div>
                     <div class="card-body">
-                        <button onclick="runReductAnalysis()" class="btn btn-success">
-                            Thực Hiện Phân Tích Tập Gần Đúng
+                        <button onclick="analyzeRoughSet()" class="btn btn-success w-100">
+                            Tìm tập thô
                         </button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="row" id="resultSection" style="display:none;">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-header">Kết Quả Phân Tích</div>
+        <!-- Results Section -->
+        <div id="resultSection" class="row mt-4" style="display: none;">
+            <div class="col-12">
+                <!-- Equivalence Classes -->
+                <div class="card result-card">
+                    <div class="card-header">Lớp tương đương</div>
                     <div class="card-body">
-                        <h5>Hệ Thông Tin</h5>
-                        <pre id="informationSystem"></pre>
-                        
-                        <h5>Hệ Quyết Định</h5>
-                        <pre id="decisionSystem"></pre>
-                        
-                        <h5>Quan Hệ Bất Khả Phân Biệt</h5>
-                        <pre id="indiscernibilityRelation"></pre>
-                        
-                        <h5>Xấp Xỉ Tập Hợp</h5>
-                        <pre id="approximation"></pre>
-                        
-                        <h5>Phụ Thuộc Thuộc Tính</h5>
-                        <pre id="attributeDependencies"></pre>
-                        
-                        <h5>Rút Gọn (Reduct)</h5>
+                        <pre id="equivalenceClasses"></pre>
+                    </div>
+                </div>
+
+                <!-- Approximations -->
+                <div class="card result-card">
+                    <div class="card-header">Xấp xỉ trên và dưới</div>
+                    <div class="card-body">
+                        <pre id="approximations"></pre>
+                    </div>
+                </div>
+
+                <!-- Accuracy -->
+                <div class="card result-card">
+                    <div class="card-header">Độ chính xác của tập thô</div>
+                    <div class="card-body">
+                        <pre id="accuracy"></pre>
+                    </div>
+                </div>
+
+                <!-- Dependency -->
+                <div class="card result-card">
+                    <div class="card-header">Mức độ phụ thuộc</div>
+                    <div class="card-body">
+                        <pre id="dependency"></pre>
+                    </div>
+                </div>
+
+                <!-- Reduct -->
+                <div class="card result-card">
+                    <div class="card-header">Tập rút gọn</div>
+                    <div class="card-body">
                         <pre id="reduct"></pre>
                     </div>
                 </div>
@@ -94,72 +121,78 @@
     </div>
 
     <script>
-        let uploadedFilePath = '';
-        let columns = [];
+        let currentFilePath = '';
 
         function uploadFile() {
             const fileInput = document.getElementById('fileUpload');
             const file = fileInput.files[0];
+            if (!file) {
+                alert('Vui lòng chọn file để tải lên');
+                return;
+            }
+
             const formData = new FormData();
             formData.append('file', file);
 
             axios.post('/upload', formData)
                 .then(response => {
-                    uploadedFilePath = response.data.filepath;
-
-                    const data = response.data.data;
-                    columns = response.data.columns;
-
-                    // Hiển thị header
-                    const headerRow = document.getElementById('tableHeader');
-                    headerRow.innerHTML = columns.map(col => `<th>${col}</th>`).join('');
-
-                    // Hiển thị dữ liệu
-                    const tableBody = document.getElementById('tableBody');
-                    tableBody.innerHTML = data.map(row =>
-                        `<tr>${columns.map(col => `<td>${row[col]}</td>`).join('')}</tr>`
-                    ).join('');
-
-                    // Hiển thị section dữ liệu
-                    document.getElementById('dataSection').style.display = 'flex';
+                    currentFilePath = response.data.filepath;
+                    displayData(response.data);
+                    document.getElementById('mainContent').style.display = 'flex';
                 })
                 .catch(error => {
-                    alert('Lỗi: ' + error.response.data.error);
+                    alert('Lỗi khi tải file: ' + error.response?.data?.error || error.message);
                 });
         }
 
-        function runReductAnalysis() {
-            if (!uploadedFilePath) {
-                alert('Vui lòng tải lên dữ liệu trước');
+        function displayData(data) {
+            // Display headers
+            const headerRow = document.getElementById('tableHeader');
+            headerRow.innerHTML = `<tr>${data.columns.map(col => `<th>${col}</th>`).join('')}</tr>`;
+
+            // Display data
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = data.data.map(row => 
+                `<tr>${data.columns.map(col => `<td>${row[col]}</td>`).join('')}</tr>`
+            ).join('');
+        }
+
+        function analyzeRoughSet() {
+            if (!currentFilePath) {
+                alert('Vui lòng tải lên dữ liệu trước khi phân tích');
                 return;
             }
 
-            axios.post('/run-reduct', { filepath: uploadedFilePath })
+            axios.post('/run-reduct', { filepath: currentFilePath })
                 .then(response => {
-                    const data = response.data;
-
-                    // Hiển thị kết quả
-                    document.getElementById('informationSystem').textContent = 
-                        JSON.stringify(data.information_system, null, 2);
-                    document.getElementById('decisionSystem').textContent = 
-                        data.decision_system;
-                    document.getElementById('indiscernibilityRelation').textContent = 
-                        `Điều kiện: ${data.condition_indiscernibility}\nQuyết định: ${data.decision_indiscernibility}`;
-                    document.getElementById('approximation').textContent = 
-                        `Xấp xỉ dưới: ${data.lower_approximation_size}\n` +
-                        `Xấp xỉ trên: ${data.upper_approximation_size}\n` +
-                        `Độ chính xác: ${(data.approximation_accuracy * 100).toFixed(2)}%`;
-                    document.getElementById('attributeDependencies').textContent = 
-                        JSON.stringify(data.attribute_dependencies, null, 2);
-                    document.getElementById('reduct').textContent = 
-                        JSON.stringify(data.reduct, null, 2);
-
-                    // Hiển thị section kết quả
+                    displayResults(response.data);
                     document.getElementById('resultSection').style.display = 'block';
                 })
                 .catch(error => {
-                    alert('Lỗi: ' + (error.response?.data?.error || error.message));
+                    alert('Lỗi khi phân tích: ' + error.response?.data?.error || error.message);
                 });
+        }
+
+        function displayResults(results) {
+            // Hiển thị lớp tương đương theo từng thuộc tính
+            let eqByAttrText = "";
+            for (const [attr, formatted] of Object.entries(results.equivalence_by_attribute.formatted)) {
+                eqByAttrText += formatted + "\n";
+            }
+            document.getElementById('equivalenceClasses').textContent = 
+                eqByAttrText + "\n" + results.equivalence_all_attributes.formatted;
+
+            // Hiển thị xấp xỉ
+            document.getElementById('approximations').textContent = results.approximations.formatted;
+
+            // Hiển thị độ chính xác riêng
+            document.getElementById('accuracy').textContent = results.approximations.formatted_accuracy;
+
+            // Hiển thị độ phụ thuộc
+            document.getElementById('dependency').textContent = results.dependency.formatted;
+
+            // Hiển thị các rút gọn
+            document.getElementById('reduct').textContent = results.reducts.formatted;
         }
     </script>
 </body>

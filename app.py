@@ -1,12 +1,13 @@
 import os
 from flask import Flask, render_template, request, jsonify
 import pandas as pd
-from algorithms.pre_processing import generate_descriptive_stats
 from algorithms.association_rules import run_association_rules
 from algorithms.reduct import perform_rough_set_analysis
 from algorithms.naive_bayes import predict_naive_bayes
 from algorithms.decision_tree import run_decision_tree_analysis
 from algorithms.kmeans import run_kmeans_3d_clustering
+from algorithms.konohen import run_konohen_clustering
+from algorithms.pre_processing import analyze_correlation
 
 
 app = Flask(__name__)
@@ -42,6 +43,10 @@ def decision_tree_page():
 @app.route('/k-means')
 def kmeans_page():
     return render_template('kmeans.html')
+
+@app.route('/konohen')
+def konohen_page():
+    return render_template('konohen.html')
 
 
 
@@ -94,50 +99,35 @@ def upload_data():
 
 
 #============================ Preprocess Data ============================#
-@app.route('/run-preprocess', methods=['POST'])
-def preprocess_data():
+@app.route('/run-correlation-analysis', methods=['POST'])
+def correlation_analysis():
     try:
-        # Receive parameters from frontend
         data = request.json
-        
-        # Validate input
         if not data or 'filepath' not in data:
             return jsonify({"error": "Missing required filepath"}), 400
         
-        # Read the CSV file
         df = pd.read_csv(data['filepath'])
-        
-        # Generate descriptive statistics
-        descriptive_stats = generate_descriptive_stats(df)
-        
-        # Handle missing values
-        missing_values = {str(k): int(v) for k, v in df.isnull().sum().to_dict().items()}
-        
-        # 2. Imputation strategy
-        # Numeric columns: fill with mean
         numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
-        for col in numeric_cols:
-            df[col].fillna(df[col].mean(), inplace=True)
+        if len(numeric_cols) < 2:
+            return jsonify({"error": "Cần ít nhất 2 cột số để phân tích tương quan"}), 400
+            
+        x_col = numeric_cols[0]
+        y_col = numeric_cols[1]
         
-        # Categorical columns: fill with mode
-        categorical_cols = df.select_dtypes(include=['object']).columns
-        for col in categorical_cols:
-            df[col].fillna(df[col].mode()[0], inplace=True)
-        
-        # One-hot encoding for categorical variables
-        df_encoded = pd.get_dummies(df, columns=list(categorical_cols))
+        plot_base64, detailed_stats, stats_df = analyze_correlation(data['filepath'], x_col, y_col)
         
         return jsonify({
-            "descriptive_stats": descriptive_stats,
-            "missing_values": missing_values,
-            "preprocessed_columns": list(df_encoded.columns),
-            "preprocessed_data": df_encoded.head(10).to_dict(orient='records')
+            "success": True,
+            "plot": plot_base64,
+            "detailed_stats": detailed_stats,
+            "stats": stats_df.to_dict('records'),
+            "x_col": x_col,
+            "y_col": y_col
         })
     
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": f"Lỗi xử lý tiền xử lý: {str(e)}"}), 500
+        return jsonify({"error": str(e)}), 500
+
 
 
 #============================ Association Rules ============================#
@@ -189,24 +179,19 @@ def run_association_rules_route():
 @app.route('/run-reduct', methods=['POST'])
 def run_reduct_analysis():
     try:
-        # Receive parameters from frontend
         data = request.json
         
-        # Validate input
         if not data or 'filepath' not in data:
             return jsonify({"error": "Missing required filepath"}), 400
         
-        # Read the CSV file
         df = pd.read_csv(data['filepath'])
-        
-        # Run Rough Set Theory analysis
         result = perform_rough_set_analysis(df)
         
         return jsonify(result)
     
     except Exception as e:
         import traceback
-        traceback.print_exc()  # Print full traceback for debugging
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
     
 
@@ -304,6 +289,26 @@ def kmeans_route():
     except Exception as e:
         import traceback
         traceback.print_exc()  # Print full traceback for debugging
+        return jsonify({"error": str(e)}), 500
+    
+
+
+
+#============================ Konohen ============================#
+@app.route('/run-konohen', methods=['POST'])
+def konohen_route():
+    try:
+        data = request.json
+        if not data or 'filepath' not in data:
+            return jsonify({"error": "Missing required parameters"}), 400
+        
+        # Run Konohen clustering
+        results = run_konohen_clustering(data['filepath'])
+        return jsonify(results)
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
     
 

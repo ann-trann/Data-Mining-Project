@@ -43,23 +43,27 @@ def run_decision_tree_analysis(data, features, target, criterion='entropy'):
     y_encoded = target_encoder.fit_transform(y)
     
     # Handle small dataset scenarios
-    if len(df) <= 5:  # If very small dataset
-        # Use entire dataset for training and testing
-        X_train, X_test = X_encoded, X_encoded
-        y_train, y_test = y_encoded, y_encoded
-        
-        # Warn about limited training data
-        print("Warning: Small dataset. Training on entire dataset.")
+    if len(df) < 10:  # Điều chỉnh ngưỡng nhỏ hơn
+        # Sử dụng train_test_split với test_size nhỏ hơn
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_encoded, y_encoded, 
+            test_size=0.3,  # Giảm kích thước test set
+            random_state=42
+        )
     else:
         # Normal train-test split
-        X_train, X_test, y_train, y_test = train_test_split(X_encoded, y_encoded, test_size=0.2, random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_encoded, y_encoded, 
+            test_size=0.2, 
+            random_state=42
+        )
     
-    # Train Decision Tree with selected criterion
+    # Train Decision Tree
     dt_classifier = DecisionTreeClassifier(random_state=42, criterion=criterion)
     dt_classifier.fit(X_train, y_train)
     
-    # Compute accuracy (handle potential zero-division)
-    accuracy = dt_classifier.score(X_test, y_test) if len(X_test) > 0 else 0.0
+    # Tính accuracy trên toàn bộ dataset thay vì chỉ test set
+    accuracy = dt_classifier.score(X_encoded, y_encoded)
     
     # Visualize Decision Tree
     fig, ax = plt.subplots(figsize=(20,10))

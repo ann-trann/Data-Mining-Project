@@ -13,6 +13,10 @@
             max-height: 400px;
             overflow-y: auto;
         }
+        .alert-light {
+            color: #141619;
+            border-color: #636464;
+        }
     </style>
 </head>
 <body>
@@ -41,7 +45,7 @@
         <div class="row" id="dataSection" style="display:none;">
             <div class="col-md-7">
                 <div class="card mb-4">
-                    <div class="card-header">Dữ Liệu Gốc</div>
+                    <div class="card-header">Dữ Liệu</div>
                     <div class="card-body" style="max-height: 400px; overflow-y: auto;">
                         <table id="dataTable" class="table table-striped">
                             <thead id="tableHeader"></thead>
@@ -52,57 +56,39 @@
             </div>
             <div class="col-md-5">
                 <div class="card mb-4">
-                    <div class="card-header">Cài Đặt</div>
+                    <div class="card-header">Phân Tích Tương Quan</div>
                     <div class="card-body">
-                        <button onclick="preprocessData()" class="btn btn-success">
-                            Tiền Xử Lý Dữ Liệu
+                        <button onclick="runCorrelationAnalysis()" class="btn btn-success" id="runAnalysisBtn" disabled>
+                            Phân tích tương quan
                         </button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="row" id="preprocessingSection" style="display:none;">
-            <div class="col-md-6">
-                <div class="card mb-4">
-                    <div class="card-header">Thống Kê Mô Tả</div>
-                    <div class="card-body stats-table">
-                        <table id="descriptiveStatsTable" class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Chỉ Số</th>
-                                    <th>Giá Trị</th>
-                                </tr>
-                            </thead>
-                            <tbody id="descriptiveStatsBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card mb-4">
-                    <div class="card-header">Giá Trị Bị Thiếu</div>
-                    <div class="card-body">
-                        <table id="missingValuesTable" class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Cột</th>
-                                    <th>Số Giá Trị Bị Thiếu</th>
-                                </tr>
-                            </thead>
-                            <tbody id="missingValuesBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+        <div class="row" id="resultsSection" style="display:none;">
             <div class="col-md-12">
                 <div class="card">
-                    <div class="card-header">Dữ Liệu Sau Tiền Xử Lý</div>
-                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                        <table id="preprocessedTable" class="table table-striped">
-                            <thead id="preprocessedHeader"></thead>
-                            <tbody id="preprocessedBody"></tbody>
-                        </table>
+                    <div class="card-header">Kết Quả Phân Tích Tương Quan</div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <h5>Biểu Đồ Phân Tích</h5>
+                                <div id="correlationPlot"></div>
+                            </div>
+                            <div class="col-md-4">
+                                <h5>Thống Kê Chi Tiết</h5>
+                                <div id="correlationText"></div>
+                                <div class="mt-4">
+                                    <h6>THỐNG KÊ MÔ TẢ:</h6>
+                                    <div style="max-height: 300px; overflow-y: auto;">
+                                        <table class="table table-striped" id="statsTableContainer">
+                                            <!-- Bảng sẽ được tạo động bằng JavaScript -->
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -138,110 +124,104 @@
 
                     // Hiển thị section dữ liệu
                     document.getElementById('dataSection').style.display = 'flex';
-                    document.getElementById('preprocessingSection').style.display = 'none';
+                    document.getElementById('resultsSection').style.display = 'none';
+                    document.getElementById('runAnalysisBtn').disabled = false;
                 })
                 .catch(error => {
                     alert('Lỗi: ' + error.response.data.error);
                 });
         }
 
-        function preprocessData() {
+        function runCorrelationAnalysis() {
             if (!uploadedFilePath) {
                 alert('Vui lòng tải lên dữ liệu trước');
                 return;
             }
 
-            // Send request to preprocess endpoint
-            axios.post('/run-preprocess', { filepath: uploadedFilePath })
+            axios.post('/run-correlation-analysis', { filepath: uploadedFilePath })
                 .then(response => {
-                    // Display descriptive statistics
-                    const descriptiveStatsBody = document.getElementById('descriptiveStatsBody');
-                    descriptiveStatsBody.innerHTML = '';  // Clear previous content
+                    const results = response.data;
+                    
+                    // Hiển thị biểu đồ
+                    document.getElementById('correlationPlot').innerHTML = `
+                        <img src="data:image/png;base64,${results.plot}" 
+                             alt="Biểu đồ phân tán" 
+                             style="width: 100%; max-width: 100%;">
+                    `;
+                    
+                    // Format và hiển thị kết quả thống kê
+                    document.getElementById('correlationText').innerHTML = `
+                        <div class="alert alert-light">
+                            <h6>1. Giá trị trung bình:</h6>
+                            <p>Trung bình ${results.detailed_stats.mean.x_label}: ${results.detailed_stats.mean.x.toFixed(4)}</p>
+                            <p>Trung bình ${results.detailed_stats.mean.y_label}: ${results.detailed_stats.mean.y.toFixed(4)}</p>
 
-                    // Process Numeric Columns
-                    if (response.data.descriptive_stats['Numeric Columns']) {
-                        const numericTitle = document.createElement('tr');
-                        numericTitle.innerHTML = `<th colspan="2" class="bg-light text-primary">Numeric Columns</th>`;
-                        descriptiveStatsBody.appendChild(numericTitle);
+                            <h6>2. Phương sai:</h6>
+                            <p>Phương sai ${results.detailed_stats.mean.x_label}: ${results.detailed_stats.variance.x.toFixed(4)}</p>
+                            <p>Phương sai ${results.detailed_stats.mean.y_label}: ${results.detailed_stats.variance.y.toFixed(4)}</p>
 
-                        Object.entries(response.data.descriptive_stats['Numeric Columns']).forEach(([column, stats]) => {
-                            // Column name row
-                            const columnNameRow = document.createElement('tr');
-                            columnNameRow.innerHTML = `<th colspan="2" class="bg-light">${column}</th>`;
-                            descriptiveStatsBody.appendChild(columnNameRow);
+                            <h6>3. Độ lệch chuẩn:</h6>
+                            <p>Độ lệch chuẩn ${results.detailed_stats.mean.x_label}: ${results.detailed_stats.std.x.toFixed(4)}</p>
+                            <p>Độ lệch chuẩn ${results.detailed_stats.mean.y_label}: ${results.detailed_stats.std.y.toFixed(4)}</p>
 
-                            // Individual stats rows
-                            Object.entries(stats).forEach(([statName, statValue]) => {
-                                const statRow = document.createElement('tr');
-                                statRow.innerHTML = `
-                                    <td>${statName}</td>
-                                    <td>${statValue}</td>
-                                `;
-                                descriptiveStatsBody.appendChild(statRow);
-                            });
-                        });
-                    }
+                            <h6>4. Hiệp phương sai:</h6>
+                            <p>Hiệp phương sai ${results.detailed_stats.mean.x_label},${results.detailed_stats.mean.y_label}: ${results.detailed_stats.covariance.toFixed(4)}</p>
 
-                    // Process Categorical Columns
-                    if (response.data.descriptive_stats['Categorical Columns']) {
-                        const categoricalTitle = document.createElement('tr');
-                        categoricalTitle.innerHTML = `<th colspan="2" class="bg-light text-primary">Categorical Columns</th>`;
-                        descriptiveStatsBody.appendChild(categoricalTitle);
+                            <h6>5. Hệ số tương quan Pearson:</h6>
+                            <p>r = ${results.detailed_stats.correlation.toFixed(4)}</p>
+                            <p>p-value = ${results.detailed_stats.p_value.toFixed(4)}</p>
 
-                        Object.entries(response.data.descriptive_stats['Categorical Columns']).forEach(([column, stats]) => {
-                            // Column name row
-                            const columnNameRow = document.createElement('tr');
-                            columnNameRow.innerHTML = `<th colspan="2" class="bg-light">${column}</th>`;
-                            descriptiveStatsBody.appendChild(columnNameRow);
+                            <h6>6. Hệ số hồi quy:</h6>
+                            <p>b1 = ${results.detailed_stats.regression.b1.toFixed(4)}</p>
+                            <p>b1 * sigma_x / sigma_y = ${results.detailed_stats.regression.b1_normalized.toFixed(4)}</p>
 
-                            // Individual stats rows
-                            Object.entries(stats).forEach(([statName, statValue]) => {
-                                // Special handling for Value Frequencies
-                                let displayValue = statName === 'Value Frequencies' 
-                                    ? JSON.stringify(statValue).replace(/"/g, '').replace(/,/g, ', ') 
-                                    : statValue;
+                            <h6>KIỂM ĐỊNH Ý NGHĨA THỐNG KÊ:</h6>
+                            <p>${results.detailed_stats.p_value < 0.05 ? 
+                                'Hệ số tương quan có ý nghĩa thống kê (p < 0.05)' : 
+                                'Hệ số tương quan không có ý nghĩa thống kê (p > 0.05)'}</p>
 
-                                const statRow = document.createElement('tr');
-                                statRow.innerHTML = `
-                                    <td>${statName}</td>
-                                    <td>${displayValue}</td>
-                                `;
-                                descriptiveStatsBody.appendChild(statRow);
-                            });
-                        });
-                    }
+                            <h6>ĐÁNH GIÁ MỨC ĐỘ TƯƠNG QUAN:</h6>
+                            <p>Mức độ tương quan: ${getMagnitude(Math.abs(results.detailed_stats.correlation))}</p>
+                            <p>Hướng tương quan: ${results.detailed_stats.correlation > 0 ? 'dương' : 'âm'}</p>
+                        </div>
+                    `;
 
-                    // Display missing values
-                    const missingValuesBody = document.getElementById('missingValuesBody');
-                    missingValuesBody.innerHTML = Object.entries(response.data.missing_values)
-                        .map(([column, count]) => `
+                    // Tạo bảng thống kê hoàn chỉnh
+                    const statsTableContainer = document.getElementById('statsTableContainer');
+                    statsTableContainer.innerHTML = `
+                        <thead>
                             <tr>
-                                <td>${column}</td>
-                                <td>${count}</td>
+                                <th>Metric</th>
+                                <th>${results.x_col}</th>
+                                <th>${results.y_col}</th>
                             </tr>
-                        `).join('');
+                        </thead>
+                        <tbody>
+                            ${results.stats.map(stat => `
+                                <tr>
+                                    <td>${stat.Metric}</td>
+                                    <td>${typeof stat[results.x_col] === 'number' ? stat[results.x_col].toFixed(4) : stat[results.x_col]}</td>
+                                    <td>${typeof stat[results.y_col] === 'number' ? stat[results.y_col].toFixed(4) : stat[results.y_col]}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    `;
 
-                    // Display preprocessed data
-                    const preprocessedHeader = document.getElementById('preprocessedHeader');
-                    preprocessedHeader.innerHTML = response.data.preprocessed_columns
-                        .map(col => `<th>${col}</th>`).join('');
-
-                    const preprocessedBody = document.getElementById('preprocessedBody');
-                    preprocessedBody.innerHTML = response.data.preprocessed_data
-                        .map(row => `<tr>${
-                            response.data.preprocessed_columns
-                                .map(col => `<td>${row[col]}</td>`)
-                                .join('')
-                        }</tr>`).join('');
-
-                    // Show preprocessing section
-                    document.getElementById('preprocessingSection').style.display = 'flex';
+                    // Hiển thị section kết quả
+                    document.getElementById('resultsSection').style.display = 'block';
                 })
                 .catch(error => {
-                    alert('Lỗi: ' + error.response.data.error);
+                    alert('Lỗi: ' + (error.response?.data?.error || error.message));
                 });
         }
 
+        // Thêm hàm helper để xác định mức độ tương quan
+        function getMagnitude(correlation) {
+            if (correlation < 0.3) return 'yếu';
+            if (correlation < 0.5) return 'trung bình';
+            if (correlation < 0.7) return 'khá';
+            return 'mạnh';
+        }
     </script>
 </body>
 </html>
