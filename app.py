@@ -154,13 +154,15 @@ def run_association_rules_route():
         # Read the CSV file
         df = pd.read_csv(data['filepath'])
         
-        # Get min_support, default to 0.2 if not provided
-        min_support = data.get('min_support', 0.5)
+        # Get min_support, min_confidence, default to 0.4 if not provided
+        min_support = data.get('min_support', 0.4)
+        min_confidence = data.get('min_confidence', 0.4)
         
         # Run association rules analysis
         plot_base64, frequent_itemsets, association_rules, maximal_frequent_itemsets = run_association_rules(
             df, 
-            min_support=min_support
+            min_support=min_support,
+            min_confidence=min_confidence
         )
         
         return jsonify({
@@ -281,8 +283,8 @@ def decision_tree_route():
 
 
 #============================ K-Means ============================#
-@app.route('/run-kmeans-3d', methods=['POST'])
-def kmeans_3d_route():
+@app.route('/run-kmeans', methods=['POST'])
+def kmeans_route():
     try:
         # Receive parameters from frontend
         data = request.json

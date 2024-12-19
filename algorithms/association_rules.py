@@ -1,264 +1,246 @@
-import io
-import base64
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-from mlxtend.preprocessing import TransactionEncoder
-from mlxtend.frequent_patterns import apriori, association_rules
+import base64
+import io
+from itertools import combinations
 
-def plot_to_base64(fig=None):
-    # Use current figure if no figure is provided
-    if fig is None:
-        fig = plt.gcf()
+def preprocess_transactions(df):
+    """
+    Chuyển đổi DataFrame thành từ điển giao dịch.
+    """
+    transactions = {}
     
-    # Create a BytesIO buffer
-    buffer = io.BytesIO()
+    # Kiểm tra dữ liệu
+    if df.empty:
+        raise ValueError("Không tìm thấy giao dịch")
     
-    # Save the figure to the buffer
-    fig.savefig(buffer, format='png')
-    buffer.seek(0)
     
-    # Encode to base64
-    image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    # Chuyển đổi từng dòng thành tập các mặt hàng
+    for index, row in df.iterrows():
+        items = set(row.dropna().astype(str))
+        transactions[index] = items
     
-    # Close the figure to free memory
-    plt.close(fig)
-    
-    return image_base64
+    return transactions
 
-def format_association_rules(df, min_support=0.2):
-    # Convert DataFrame of lists to clean transactions
-    def clean_transaction(transaction):
-        # Remove None values and convert to strings
-        return [
-            str(item).strip() 
-            for item in transaction 
-            if item is not None and str(item).strip()
-        ]
-    
-    # Process transactions, removing empty lists
-    transactions = [
-        clean_transaction(trans) 
-        for trans in df.values 
-        if any(item is not None and str(item).strip() for item in trans)
-    ]
-    
-    # If no valid transactions, return no rules found
-    if not transactions:
-        return "No association rules found."
-    
-    # Prepare data for transaction encoding
-    te = TransactionEncoder()
-    te_ary = te.fit(transactions).transform(transactions)
-    te_df = pd.DataFrame(te_ary, columns=te.columns_)
-    
-    # Generate frequent itemsets
-    frequent_itemsets = apriori(te_df, min_support=min_support, use_colnames=True)
-    frequent_itemsets = frequent_itemsets[frequent_itemsets['itemsets'].apply(lambda x: len(x) > 0)]
-    
-    # If no frequent itemsets, return no rules found
-    if frequent_itemsets.empty:
-        return "No association rules found."
-    
-    # Attempt to generate association rules with different method signatures
-    try:
-        # Try the newer method first
-        rules = association_rules(
-            transactions, 
-            min_support=min_support, 
-            min_confidence=0.5
-        )
-    except TypeError:
-        try:
-            # Try the method that requires num_itemsets
-            rules = association_rules(
-                frequent_itemsets, 
-                metric="confidence", 
-                min_threshold=0.5,
-                num_itemsets=len(frequent_itemsets)
-            )
-        except Exception as e:
-            # If all methods fail, return error message
-            print(f"Error generating association rules: {e}")
-            return "Unable to generate association rules."
-    
-    # Filter out rules with empty antecedents or consequents
-    rules = rules[
-        (rules['antecedents'].apply(lambda x: len(x) > 0)) & 
-        (rules['consequents'].apply(lambda x: len(x) > 0)) &
-        (rules['antecedents'].apply(lambda x: all(str(item).strip() != '' for item in x))) &
-        (rules['consequents'].apply(lambda x: all(str(item).strip() != '' for item in x)))
-    ]
 
-    # If no rules after filtering, return no rules found
-    if rules.empty:
-        return "No association rules found."
+def calculate_support(itemset, transactions):
+    """
+    Tính support cho một tập mặt hàng.
+    """
+    count = sum(1 for items in transactions.values() if itemset.issubset(items))
+    return count / len(transactions)
 
-    # Format rules
-    rules_str = []
-    for _, rule in rules.iterrows():
-        # Convert antecedents and consequents to sorted lists
-        antecedents = sorted(list(rule['antecedents']))
-        consequents = sorted(list(rule['consequents']))
+def apriori(transactions, min_support):
+    """
+    Thuật toán Apriori tìm tập phổ biến.
+    """
+    # Lấy tất cả các mặt hàng duy nhất
+    items = set(item for sublist in transactions.values() for item in sublist)
+    
+    # Bắt đầu với các tập một mặt hàng
+    current_itemsets = [{item} for item in items]
+    frequent_itemsets = []
+
+    while current_itemsets:
+        candidate_frequent_itemsets = []
         
-        # Create formatted strings
-        antecedent_str = '{' + ', '.join(antecedents) + '}'
-        consequent_str = '{' + ', '.join(consequents) + '}'
-        
-        rules_str.append(
-            f"{antecedent_str} => {consequent_str}, độ tin cậy: {rule['confidence']:.2f}"
-        )
-    
-    return '\n'.join(rules_str)
+        # Lọc các tập đạt ngưỡng support
+        for itemset in current_itemsets:
+            support = calculate_support(itemset, transactions)
+            if support >= min_support:
+                candidate_frequent_itemsets.append(itemset)
+                frequent_itemsets.append((frozenset(itemset), support))
 
+        # Tạo các tập ứng viên mới
+        current_itemsets = []
+        for i in range(len(candidate_frequent_itemsets)):
+            for j in range(i + 1, len(candidate_frequent_itemsets)):
+                # Hợp nhất hai tập phổ biến
+                union_set = candidate_frequent_itemsets[i].union(candidate_frequent_itemsets[j])
+                if len(union_set) == len(candidate_frequent_itemsets[i]) + 1:
+                    current_itemsets.append(union_set)
 
-def run_association_rules(df, min_support=0.5):
-    # Convert DataFrame to list of transactions, handling mixed data types
-    def process_row(row):
-        # Convert each item to string and filter out invalid items
-        return [
-            str(item).strip() 
-            for item in row 
-            if pd.notna(item) and str(item).strip()
-        ]
-    
-    # Process the DataFrame into transactions
-    transactions = df.apply(process_row, axis=1).tolist()
-    
-    # Filter out empty transactions
-    transactions = [trans for trans in transactions if trans]
-    
-    # If no valid transactions, raise an error
-    if not transactions:
-        raise ValueError("No valid transactions found in the dataset")
-    
-    # Prepare data for apriori algorithm
-    te = TransactionEncoder()
-    te_ary = te.fit(transactions).transform(transactions)
-    te_df = pd.DataFrame(te_ary, columns=te.columns_)
-    
-    # Generate frequent itemsets (filtering out empty and whitespace sets)
-    frequent_itemsets = apriori(
-        te_df, 
-        min_support=min_support, 
-        use_colnames=True
-    )
-    frequent_itemsets['itemsets'] = frequent_itemsets['itemsets'].apply(
-        lambda x: frozenset(item for item in x if item and str(item).strip())
-    )
-    frequent_itemsets = frequent_itemsets[frequent_itemsets['itemsets'].apply(len) > 0]
-    
-    # If no frequent itemsets, raise an error
-    if frequent_itemsets.empty:
-        raise ValueError(f"No frequent itemsets found with min_support={min_support}")
-    
-    # Prepare labels for the plot
-    itemset_labels = [
-        '{' + ', '.join(sorted(str(item) for item in itemset if item)) + '}' 
-        for itemset in frequent_itemsets['itemsets']
-    ]
-    
-    # Create the plot
-    fig, ax = plt.subplots(figsize=(12, 6))
-    ax.bar(range(len(frequent_itemsets)), frequent_itemsets['support'], 
-           align='center', alpha=0.7, color='skyblue')
-    ax.set_title('Frequent Itemsets Support Distribution')
-    ax.set_xlabel('Itemsets')
-    ax.set_ylabel('Support')
-    ax.set_xticks(range(len(frequent_itemsets)))
-    ax.set_xticklabels(itemset_labels, rotation=45, ha='right', fontsize=10)
-    plt.tight_layout()
-    
-    # Convert plot to base64
-    plot_base64 = plot_to_base64(fig)
-    
-    # Format results
-    frequent_itemsets_text = format_frequent_itemsets(frequent_itemsets)
-    association_rules_text = format_association_rules(pd.DataFrame(transactions), min_support)
-    maximal_frequent_itemsets_text = find_maximal_frequent_itemsets(frequent_itemsets)
+        # Loại bỏ các tập trùng lặp
+        current_itemsets = list(set(map(frozenset, current_itemsets)))
 
-    return plot_base64, frequent_itemsets_text, association_rules_text, maximal_frequent_itemsets_text
-
-
-# Thêm hàm format_frequent_itemsets để hoàn thiện
-def format_frequent_itemsets(frequent_itemsets):
-    seen_itemsets = set()
-    
-    # Sao chép và sắp xếp lại frequent_itemsets
-    sorted_itemsets = frequent_itemsets.copy()
-    sorted_itemsets['itemset_length'] = sorted_itemsets['itemsets'].apply(lambda x: len(x))
-    sorted_itemsets = sorted_itemsets.sort_values(['itemset_length', 'support'])
-    
-    frequent_itemsets_str = []
-    for _, row in sorted_itemsets.iterrows():
-        # Làm sạch và lọc itemsets
-        cleaned_itemsets = clean_and_filter_itemsets([row['itemsets']])[0]
-        
-        # Kiểm tra xem tập đã xuất hiện chưa
-        if cleaned_itemsets and cleaned_itemsets not in seen_itemsets:
-            seen_itemsets.add(cleaned_itemsets)
-            
-            itemset_str = '{' + ', '.join(cleaned_itemsets) + '}'
-            frequent_itemsets_str.append(f"Tập phổ biến: {itemset_str}: {row['support']:.2f}")
-    
-    return '\n'.join(frequent_itemsets_str)
-
-# Hàm clean_and_filter_itemsets
-def clean_and_filter_itemsets(itemsets):
-    cleaned_itemsets = []
-    for itemset in itemsets:
-        # Loại bỏ các phần tử rỗng và khoảng trắng
-        cleaned_itemset = [
-            item.strip() for item in itemset 
-            if item and item.strip()
-        ]
-        
-        # Sắp xếp và chuyển thành tuple
-        if cleaned_itemset:
-            cleaned_itemsets.append(tuple(sorted(cleaned_itemset)))
-    
-    return cleaned_itemsets
-
-
+    return sorted(frequent_itemsets, key=lambda x: len(x[0]))
 
 
 def find_maximal_frequent_itemsets(frequent_itemsets):
-    # Convert itemsets to list of tuples with frozenset and support
-    itemset_list = [
-        (frozenset(row['itemsets']), row['support']) 
-        for _, row in frequent_itemsets.iterrows() 
-        if len(row['itemsets']) > 0
-    ]
+    """
+    Find maximal frequent itemsets.
     
-    # Find maximal frequent itemsets
+    Args:
+        frequent_itemsets (list): List of frequent itemsets with support
+    
+    Returns:
+        list: Maximal frequent itemsets
+    """
     maximal_itemsets = []
-    for i, (itemset1, support1) in enumerate(itemset_list):
+    for itemset1, _ in frequent_itemsets:
         is_maximal = True
-        for j, (itemset2, support2) in enumerate(itemset_list):
-            if i != j:
-                # Check if itemset1 is a subset of itemset2 AND support2 is not lower
-                if itemset1.issubset(itemset2) and support2 >= support1:
-                    is_maximal = False
-                    break
-        
+        for itemset2, _ in frequent_itemsets:
+            if itemset1 != itemset2 and itemset1.issubset(itemset2):
+                is_maximal = False
+                break
         if is_maximal:
-            maximal_itemsets.append((itemset1, support1))
+            maximal_itemsets.append(itemset1)
+    return maximal_itemsets
+
+
+def calculate_confidence(A, B, transactions):
+    """
+    Calculate confidence for an association rule.
     
-    # Find the itemsets with the maximum length among maximal itemsets
-    max_length = max(len(itemset) for itemset, _ in maximal_itemsets)
+    Args:
+        A (set): Antecedent set
+        B (set): Consequent set
+        transactions (dict): Transaction dictionary
     
-    # Filter to keep only the maximal itemsets with maximum length
-    true_maximal_itemsets = [
-        (itemset, support) for (itemset, support) in maximal_itemsets 
-        if len(itemset) == max_length
-    ]
+    Returns:
+        float: Confidence value
+    """
+    union_set = A.union(B)
     
-    # Format maximal itemsets
-    maximal_frequent_itemsets_str = []
-    for itemset, support in true_maximal_itemsets:
-        # Convert itemset to sorted list of strings
-        itemset_str = '{' + ', '.join(sorted(str(item) for item in itemset)) + '}'
-        maximal_frequent_itemsets_str.append(
-            f"Tập phổ biến tối đại: {itemset_str}: {support:.2f}"
-        )
+    support_union = calculate_support(union_set, transactions)
+    support_A = calculate_support(A, transactions)
     
-    return '\n'.join(maximal_frequent_itemsets_str)
+    return support_union / support_A if support_A > 0 else 0
+
+
+def generate_itemsets_optimized(transactions, min_support):
+    """
+    Tối ưu hóa thuật toán Apriori.
+    """
+    # Tìm support của các mặt hàng đơn
+    single_item_supports = {}
+    
+    # Tất cả các mặt hàng
+    all_items = set(item for sublist in transactions.values() for item in sublist)
+    
+    # Tính support cho từng mặt hàng
+    for item in all_items:
+        support = calculate_support({item}, transactions)
+        if support >= min_support:
+            single_item_supports[item] = support
+    
+    # Tìm tập hai mặt hàng
+    two_item_itemsets = []
+    for item_combo in combinations(single_item_supports.keys(), 2):
+        itemset = set(item_combo)
+        support = calculate_support(itemset, transactions)
+        if support >= min_support:
+            two_item_itemsets.append((itemset, support))
+    
+    # Kết hợp kết quả
+    results = [
+        (frozenset([item]), support) for item, support in single_item_supports.items()
+    ] + two_item_itemsets
+    
+    return sorted(results, key=lambda x: (len(x[0]), x[1]), reverse=True)
+
+
+def generate_association_rules(frequent_itemsets, transactions, min_confidence):
+    """
+    Generate association rules from frequent itemsets.
+    
+    Args:
+        frequent_itemsets (list): List of frequent itemsets
+        transactions (dict): Transaction dictionary
+        min_confidence (float): Minimum confidence threshold
+    
+    Returns:
+        list: Association rules with confidence
+    """
+    rules = []
+    
+    for itemset, _ in frequent_itemsets:
+        itemset = set(itemset)
+        
+        # Generate all possible rule combinations
+        for r in range(1, len(itemset)):
+            for A in combinations(itemset, r):
+                A = set(A)
+                B = itemset - A
+                
+                if B:
+                    confidence = calculate_confidence(A, B, transactions)
+                    if confidence >= min_confidence:
+                        rules.append((A, B, confidence))
+    
+    return rules
+
+
+def plot_association_rules(frequent_itemsets):
+    """
+    Create a bar plot of itemset supports.
+    
+    Args:
+        frequent_itemsets (list): List of frequent itemsets with support
+    
+    Returns:
+        str: Base64 encoded plot image
+    """
+    plt.figure(figsize=(10, 6))
+    itemsets = [', '.join(map(str, itemset)) for itemset, _ in frequent_itemsets]
+    supports = [support for _, support in frequent_itemsets]
+    
+    plt.bar(itemsets, supports)
+    plt.title('Frequent Itemsets Support')
+    plt.xlabel('Itemsets')
+    plt.ylabel('Support')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    
+    # Save plot to base64
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png')
+    buffer.seek(0)
+    plot_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    plt.close()
+    
+    return plot_base64
+
+
+def run_association_rules(df, min_support=0.4, min_confidence=0.4):
+    # Tiền xử lý giao dịch
+    transactions = preprocess_transactions(df)
+    
+    # Tìm tập phổ biến bằng thuật toán Apriori
+    frequent_itemsets = apriori(transactions, min_support)
+    
+    # Các bước còn lại giữ nguyên như trước
+    plot_base64 = plot_association_rules(frequent_itemsets)
+    
+    # Tìm tập phổ biến tối đại
+    maximal_frequent_itemsets = find_maximal_frequent_itemsets(frequent_itemsets)
+    
+    # Sinh luật kết hợp
+    association_rules = generate_association_rules(
+        frequent_itemsets, transactions, min_confidence
+    )
+    
+    # Định dạng kết quả
+    def format_itemsets(itemsets):
+        return '\n'.join([
+            f"{set(itemset)}: {support:.2f}" 
+            for itemset, support in itemsets
+        ])
+    
+    def format_rules(rules):
+        return '\n'.join([
+            f"{set(A)} => {set(B)}, confidence: {confidence:.2f}"
+            for A, B, confidence in rules
+        ])
+    
+    frequent_itemsets_str = format_itemsets(frequent_itemsets)
+    maximal_frequent_itemsets_str = '\n'.join([str(set(itemset)) for itemset in maximal_frequent_itemsets])
+    association_rules_str = format_rules(association_rules)
+    
+    return (
+        plot_base64, 
+        frequent_itemsets_str, 
+        association_rules_str, 
+        maximal_frequent_itemsets_str
+    )
